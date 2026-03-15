@@ -1,0 +1,898 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#667eea">
+<title>EndoBoard - Board Review</title>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script>
+window.FIREBASE_CONFIG = {
+  apiKey: "AIzaSyDUG-t_oBW5t_eQ1pKwjhsUz4HLggavFQg",
+  authDomain: "endo-board-prep-app.firebaseapp.com",
+  databaseURL: "https://endo-board-prep-app-default-rtdb.firebaseio.com",
+  projectId: "endo-board-prep-app",
+  storageBucket: "endo-board-prep-app.firebasestorage.app",
+  messagingSenderId: "1921184312",
+  appId: "1:1921184312:web:8ab77068960c345f156ccd"
+};
+</script>
+<style>
+:root {
+  --primary: #667eea;
+  --primary-dark: #5a67d8;
+  --primary-light: #a3bffa;
+  --success: #48bb78;
+  --success-bg: #f0fff4;
+  --danger: #f56565;
+  --danger-bg: #fff5f5;
+  --warning: #ed8936;
+  --warning-bg: #fffff0;
+  --bg: #f7fafc;
+  --card: #ffffff;
+  --text: #2d3748;
+  --text-secondary: #718096;
+  --border: #e2e8f0;
+  --radius: 16px;
+  --shadow: 0 4px 6px -1px rgba(0,0,0,.1), 0 2px 4px -1px rgba(0,0,0,.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0,0,0,.1), 0 4px 6px -2px rgba(0,0,0,.05);
+  --transition: all .2s ease;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a202c;
+    --card: #2d3748;
+    --text: #e2e8f0;
+    --text-secondary: #a0aec0;
+    --border: #4a5568;
+    --success-bg: #1a332a;
+    --danger-bg: #3b1a1a;
+    --warning-bg: #332b1a;
+    --shadow: 0 4px 6px -1px rgba(0,0,0,.3);
+    --shadow-lg: 0 10px 15px -3px rgba(0,0,0,.3);
+  }
+}
+* { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  min-height: 100dvh;
+  overflow-x: hidden;
+}
+.app { max-width: 600px; margin: 0 auto; padding-bottom: 80px; }
+.bottom-nav {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: var(--card);
+  border-top: 1px solid var(--border);
+  display: flex; justify-content: space-around;
+  padding: 8px 0 max(8px, env(safe-area-inset-bottom));
+  z-index: 100;
+  box-shadow: 0 -2px 10px rgba(0,0,0,.1);
+}
+.nav-item {
+  display: flex; flex-direction: column; align-items: center;
+  font-size: 10px; color: var(--text-secondary);
+  cursor: pointer; padding: 4px 12px;
+  transition: var(--transition); border: none; background: none;
+}
+.nav-item.active { color: var(--primary); }
+.nav-item svg { width: 24px; height: 24px; margin-bottom: 2px; }
+.header {
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: white; padding: 20px 20px 16px; text-align: center;
+  position: sticky; top: 0; z-index: 50;
+}
+.header h1 { font-size: 20px; font-weight: 700; }
+.header .subtitle { font-size: 12px; opacity: .8; margin-top: 2px; }
+.streak-banner {
+  display: flex; align-items: center; justify-content: center;
+  gap: 8px; padding: 8px 16px; margin: 0 20px 0;
+  background: linear-gradient(135deg, #f6ad55, #ed8936);
+  border-radius: 0 0 var(--radius) var(--radius);
+  color: white; font-weight: 600; font-size: 14px;
+}
+.streak-banner .fire { font-size: 20px; }
+.card {
+  background: var(--card); border-radius: var(--radius);
+  padding: 20px; margin: 12px 16px;
+  box-shadow: var(--shadow); transition: var(--transition);
+}
+.card:active { transform: scale(.98); }
+.card-title { font-size: 14px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 12px; }
+.stats-row { display: flex; gap: 8px; margin: 12px 16px; }
+.stat-card {
+  flex: 1; background: var(--card); border-radius: 12px;
+  padding: 12px 8px; text-align: center; box-shadow: var(--shadow);
+}
+.stat-value { font-size: 24px; font-weight: 700; color: var(--primary); }
+.stat-label { font-size: 10px; color: var(--text-secondary); text-transform: uppercase; margin-top: 2px; }
+.readiness-ring {
+  width: 120px; height: 120px; margin: 0 auto 12px;
+  position: relative;
+}
+.readiness-ring svg { transform: rotate(-90deg); }
+.readiness-ring .score {
+  position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+  font-size: 28px; font-weight: 700; color: var(--primary);
+}
+.readiness-label { text-align: center; font-size: 13px; color: var(--text-secondary); }
+.chapter-item {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px 0; border-bottom: 1px solid var(--border);
+  cursor: pointer; transition: var(--transition);
+}
+.chapter-item:last-child { border-bottom: none; }
+.chapter-num {
+  width: 36px; height: 36px; border-radius: 10px;
+  background: var(--primary); color: white;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700; font-size: 14px; flex-shrink: 0;
+}
+.chapter-num.mastered { background: var(--success); }
+.chapter-num.learning { background: var(--warning); }
+.chapter-info { flex: 1; min-width: 0; }
+.chapter-name { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.chapter-progress { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+.chapter-bar { height: 4px; background: var(--border); border-radius: 2px; margin-top: 6px; overflow: hidden; }
+.chapter-bar-fill { height: 100%; border-radius: 2px; transition: width .5s ease; }
+.quiz-header {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 16px 20px; background: var(--card);
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 50;
+}
+.quiz-back { background: none; border: none; font-size: 16px; color: var(--primary); cursor: pointer; padding: 8px; }
+.quiz-progress-text { font-size: 13px; color: var(--text-secondary); font-weight: 600; }
+.quiz-timer { font-size: 13px; color: var(--warning); font-weight: 700; font-variant-numeric: tabular-nums; }
+.question-card {
+  background: var(--card); margin: 16px; border-radius: var(--radius);
+  padding: 24px 20px; box-shadow: var(--shadow-lg);
+}
+.q-number { font-size: 12px; color: var(--primary); font-weight: 700; text-transform: uppercase; margin-bottom: 8px; }
+.q-text { font-size: 16px; line-height: 1.5; font-weight: 500; margin-bottom: 20px; }
+.option-btn {
+  display: block; width: 100%; text-align: left;
+  padding: 14px 16px; margin-bottom: 10px;
+  background: var(--bg); border: 2px solid var(--border);
+  border-radius: 12px; font-size: 15px; line-height: 1.4;
+  cursor: pointer; transition: var(--transition);
+  color: var(--text);
+}
+.option-btn:hover { border-color: var(--primary); background: rgba(102,126,234,.05); }
+.option-btn.selected { border-color: var(--primary); background: rgba(102,126,234,.1); }
+.option-btn.correct { border-color: var(--success); background: var(--success-bg); }
+.option-btn.incorrect { border-color: var(--danger); background: var(--danger-bg); }
+.option-btn.show-correct { border-color: var(--success); background: var(--success-bg); }
+.option-letter { font-weight: 700; color: var(--primary); margin-right: 8px; }
+.explanation-box {
+  margin-top: 16px; padding: 16px; border-radius: 12px;
+  background: rgba(102,126,234,.08); border-left: 4px solid var(--primary);
+  font-size: 14px; line-height: 1.6;
+  display: none;
+}
+.explanation-box.show { display: block; }
+.explanation-box strong { color: var(--primary); }
+.next-btn {
+  display: block; width: calc(100% - 32px); margin: 16px auto;
+  padding: 16px; background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: white; border: none; border-radius: 12px;
+  font-size: 16px; font-weight: 600; cursor: pointer;
+  transition: var(--transition);
+}
+.next-btn:active { transform: scale(.97); }
+.mode-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.mode-btn {
+  background: var(--card); border: 2px solid var(--border);
+  border-radius: var(--radius); padding: 20px 16px;
+  text-align: center; cursor: pointer; transition: var(--transition);
+}
+.mode-btn:active { transform: scale(.97); }
+.mode-btn .mode-icon { font-size: 28px; margin-bottom: 8px; }
+.mode-btn .mode-name { font-size: 14px; font-weight: 600; }
+.mode-btn .mode-desc { font-size: 11px; color: var(--text-secondary); margin-top: 4px; }
+.flashcard-container { perspective: 1000px; margin: 16px; }
+.flashcard {
+  width: 100%; min-height: 200px; position: relative;
+  transform-style: preserve-3d; transition: transform .6s;
+  cursor: pointer;
+}
+.flashcard.flipped { transform: rotateY(180deg); }
+.flashcard-face {
+  position: absolute; width: 100%; min-height: 200px;
+  backface-visibility: hidden; border-radius: var(--radius);
+  padding: 24px; display: flex; flex-direction: column;
+  justify-content: center; align-items: center; text-align: center;
+  box-shadow: var(--shadow-lg);
+}
+.flashcard-front {
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: white; font-size: 18px; line-height: 1.5; font-weight: 500;
+}
+.flashcard-back {
+  background: var(--card); transform: rotateY(180deg);
+  font-size: 16px; line-height: 1.6; color: var(--text);
+}
+.flashcard-hint { font-size: 12px; opacity: .7; margin-top: 12px; }
+.flashcard-nav { display: flex; gap: 12px; margin: 16px; }
+.flashcard-nav button {
+  flex: 1; padding: 14px; border-radius: 12px;
+  font-size: 14px; font-weight: 600; cursor: pointer;
+  border: 2px solid var(--border); background: var(--card);
+  color: var(--text); transition: var(--transition);
+}
+.flashcard-nav .knew-it { border-color: var(--success); color: var(--success); }
+.flashcard-nav .study-more { border-color: var(--warning); color: var(--warning); }
+.results-container { text-align: center; padding: 24px 16px; }
+.results-score { font-size: 56px; font-weight: 700; color: var(--primary); }
+.results-label { font-size: 14px; color: var(--text-secondary); margin-bottom: 16px; }
+.results-breakdown { text-align: left; }
+.result-item {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 12px 0; border-bottom: 1px solid var(--border);
+}
+.result-q { font-size: 13px; flex: 1; margin-right: 12px; }
+.result-badge {
+  padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600;
+}
+.result-badge.correct { background: var(--success-bg); color: var(--success); }
+.result-badge.incorrect { background: var(--danger-bg); color: var(--danger); }
+.xp-popup {
+  position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+  font-size: 32px; font-weight: 700; color: var(--success);
+  pointer-events: none; z-index: 200;
+  animation: xpFloat 1s ease-out forwards;
+}
+@keyframes xpFloat {
+  0% { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%,-100%) scale(1.5); }
+}
+.chapter-select-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 12px 0; }
+.ch-select-btn {
+  padding: 10px 4px; border-radius: 10px; border: 2px solid var(--border);
+  background: var(--card); font-size: 12px; font-weight: 600;
+  cursor: pointer; text-align: center; transition: var(--transition);
+  color: var(--text);
+}
+.ch-select-btn.selected { border-color: var(--primary); background: rgba(102,126,234,.1); color: var(--primary); }
+.ch-select-btn:active { transform: scale(.95); }
+.hidden { display: none !important; }
+.text-center { text-align: center; }
+.mb-8 { margin-bottom: 8px; }
+.mb-12 { margin-bottom: 12px; }
+.mb-16 { margin-bottom: 16px; }
+.mt-16 { margin-top: 16px; }
+.chart-container { width: 100%; height: 200px; position: relative; }
+.chart-bar-group { display: flex; align-items: flex-end; justify-content: space-between; height: 160px; padding: 0 4px; }
+.chart-bar-wrapper { display: flex; flex-direction: column; align-items: center; flex: 1; }
+.chart-bar {
+  width: 70%; min-width: 12px; border-radius: 4px 4px 0 0;
+  transition: height .5s ease; position: relative;
+}
+.chart-bar-label { font-size: 9px; color: var(--text-secondary); margin-top: 4px; writing-mode: vertical-lr; transform: rotate(180deg); height: 30px; }
+.chart-percent { font-size: 9px; font-weight: 600; color: var(--text); margin-bottom: 2px; text-align: center; }
+.confetti { position: fixed; top: -10px; z-index: 300; pointer-events: none; animation: confettiFall 3s ease-in forwards; }
+@keyframes confettiFall {
+  0% { transform: translateY(0) rotate(0); opacity: 1; }
+  100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+}
+.spinner { width: 40px; height: 40px; border: 4px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin 1s linear infinite; margin: 40px auto; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.sync-status { font-size: 11px; color: var(--text-secondary); text-align: center; padding: 4px; }
+.sync-status.synced { color: var(--success); }
+.sync-status.syncing { color: var(--warning); }
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const QUESTIONS = [{"id":"ch1_q1","chapter":1,"chapterTitle":"Evidence-Based Dentistry","number":1,"question":"According to the OCEBM hierarchy, which study design represents the highest level of evidence?","options":[{"letter":"A","text":"Randomized controlled trial"},{"letter":"B","text":"Cohort study"},{"letter":"C","text":"Systematic review"},{"letter":"D","text":"Case-control study"}],"correctAnswer":"C","explanation":"Systematic review According to the OCEBM hierarchy, systematic reviews (including meta-analyses) are at the top, followed by RCTs, cohort studies, case-control studies, case series, and expert opinion."},{"id":"ch1_q2","chapter":1,"chapterTitle":"Evidence-Based Dentistry","number":2,"question":"What P value is generally considered to indicate statistical significance?","options":[{"letter":"A","text":"P \u2264 0.10"},{"letter":"B","text":"P \u2264 0.05"},{"letter":"C","text":"P \u2264 0.50"},{"letter":"D","text":"P \u2264 0.01"}],"correctAnswer":"B","explanation":"P \u2264 0.05 A P value less than or equal to 0.05 generally indicates statistical significance, meaning there is less than a 5% probability that results occurred by chance."},{"id":"ch1_q3","chapter":1,"chapterTitle":"Evidence-Based Dentistry","number":3,"question":"Which organization produces systematic reviews considered the gold standard for evidence-based medicine?","options":[{"letter":"A","text":"American Dental Association"},{"letter":"B","text":"Oxford Centre for Evidence-Based Medicine"},{"letter":"C","text":"Cochrane Collaborative"},{"letter":"D","text":"World Health Organization"}],"correctAnswer":"C","explanation":"Cochrane Collaborative The Cochrane Collaborative produces systematic reviews with post-publication peer review, constant updates, and strong conflict of interest policies, making them the gold standard."}];
+const FLASHCARDS = [{"id":"fc_ch1_1","chapter":1,"chapterTitle":"Evidence-Based Dentistry","front":"What P value indicates statistical significance?","back":"P <= 0.05 (less than 5% probability results occurred by chance)","category":"high-yield"}];
+const CHAPTERS = [
+  {num:1,title:"Evidence-Based Dentistry",short:"EBD"},
+  {num:2,title:"Microbiology",short:"Micro"},
+  {num:3,title:"Pulpal & Periapical Anatomy",short:"Anat"},
+  {num:4,title:"Pulpal & Periapical Pathology",short:"Path"},
+  {num:5,title:"Medicine & Pharmacology",short:"Pharm"},
+  {num:6,title:"Diagnosis",short:"Dx"},
+  {num:7,title:"Non-Endo Disease",short:"NonEndo"},
+  {num:8,title:"Treatment",short:"Tx"},
+  {num:9,title:"Traumatic Injuries",short:"Trauma"},
+  {num:10,title:"Cracked & Fractured Teeth",short:"Cracks"},
+  {num:11,title:"Resorptive Diseases",short:"Resorp"},
+  {num:12,title:"Prognosis",short:"Prog"},
+  {num:13,title:"Complications",short:"Comp"}
+];
+let state = {
+  screen: 'dashboard',
+  quizMode: null,
+  quizQuestions: [],
+  currentIndex: 0,
+  selectedAnswer: null,
+  answered: false,
+  sessionResults: [],
+  selectedChapters: [],
+  flashcardIndex: 0,
+  flashcardFlipped: false,
+  timerSeconds: 0,
+  timerInterval: null,
+  examTimeLimit: 3600,
+};
+const STORAGE_KEY = 'endoboard_progress';
+function getDefaultProgress() {
+  return {
+    xp: 0,
+    streak: 0,
+    lastStudyDate: null,
+    questionHistory: {},
+    sessionHistory: [],
+    flashcardHistory: {},
+    studyCode: null,
+    totalQuestions: 0,
+    totalCorrect: 0,
+  };
+}
+let progress = getDefaultProgress();
+function loadProgress() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) {
+      progress = {...getDefaultProgress(), ...JSON.parse(saved)};
+    }
+  } catch(e) { console.error('Load error:', e); }
+  updateStreak();
+}
+function saveProgress() {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(progress));
+  } catch(e) { console.error('Save error:', e); }
+  syncToFirebase();
+}
+function updateStreak() {
+  const today = new Date().toDateString();
+  const yesterday = new Date(Date.now() - 86400000).toDateString();
+  if (progress.lastStudyDate === today) return;
+  if (progress.lastStudyDate === yesterday) {
+    progress.streak++;
+  } else if (progress.lastStudyDate !== today) {
+    progress.streak = progress.lastStudyDate ? 0 : 0;
+  }
+}
+function recordStudyToday() {
+  const today = new Date().toDateString();
+  const yesterday = new Date(Date.now() - 86400000).toDateString();
+  if (progress.lastStudyDate !== today) {
+    if (progress.lastStudyDate === yesterday) {
+      progress.streak++;
+    } else {
+      progress.streak = 1;
+    }
+    progress.lastStudyDate = today;
+  }
+}
+let firebaseReady = false;
+let db = null;
+function initFirebase() {
+  const config = window.FIREBASE_CONFIG;
+  if (!config) return;
+  try {
+    if (typeof firebase !== 'undefined') {
+      firebase.initializeApp(config);
+      db = firebase.database();
+      firebaseReady = true;
+      console.log('Firebase connected');
+      if (progress.studyCode) {
+        pullFromFirebase();
+        db.ref('users/' + progress.studyCode).on('value', snap => {
+          if (snap.val()) mergeRemoteProgress(snap.val());
+        });
+      }
+      updateSyncStatus('synced');
+    }
+  } catch(e) { console.log('Firebase init error:', e); updateSyncStatus('offline'); }
+}
+function syncToFirebase() {
+  if (!firebaseReady || !db || !progress.studyCode) return;
+  updateSyncStatus('syncing');
+  try {
+    db.ref('users/' + progress.studyCode).set({
+      ...progress,
+      lastSyncDevice: navigator.userAgent.substring(0,50),
+      lastSyncTime: Date.now()
+    }).then(() => updateSyncStatus('synced'))
+      .catch(() => updateSyncStatus('offline'));
+  } catch(e) { updateSyncStatus('offline'); }
+}
+function pullFromFirebase() {
+  if (!firebaseReady || !db || !progress.studyCode) return;
+  try {
+    db.ref('users/' + progress.studyCode).once('value', snap => {
+      if (snap.val()) mergeRemoteProgress(snap.val());
+    });
+  } catch(e) {}
+}
+function mergeRemoteProgress(remote) {
+  let changed = false;
+  if (remote.questionHistory) {
+    Object.keys(remote.questionHistory).forEach(qid => {
+      const r = remote.questionHistory[qid];
+      const l = progress.questionHistory[qid];
+      if (!l || r.attempts > l.attempts) {
+        progress.questionHistory[qid] = r;
+        changed = true;
+      }
+    });
+  }
+  if (remote.flashcardHistory) {
+    Object.keys(remote.flashcardHistory).forEach(fid => {
+      const r = remote.flashcardHistory[fid];
+      const l = progress.flashcardHistory[fid];
+      if (!l || r.seen > l.seen) {
+        progress.flashcardHistory[fid] = r;
+        changed = true;
+      }
+    });
+  }
+  if (remote.sessionHistory) {
+    const localDates = new Set(progress.sessionHistory.map(s => s.date));
+    remote.sessionHistory.forEach(s => {
+      if (!localDates.has(s.date)) {
+        progress.sessionHistory.push(s);
+        changed = true;
+      }
+    });
+    progress.sessionHistory.sort((a,b) => a.date - b.date);
+  }
+  if ((remote.xp||0) > progress.xp) { progress.xp = remote.xp; changed = true; }
+  if ((remote.streak||0) > progress.streak) { progress.streak = remote.streak; changed = true; }
+  if ((remote.totalQuestions||0) > progress.totalQuestions) { progress.totalQuestions = remote.totalQuestions; changed = true; }
+  if ((remote.totalCorrect||0) > progress.totalCorrect) { progress.totalCorrect = remote.totalCorrect; changed = true; }
+  if (remote.studyCode) progress.studyCode = remote.studyCode;
+  if (remote.lastStudyDate && (!progress.lastStudyDate || remote.lastStudyDate > progress.lastStudyDate)) {
+    progress.lastStudyDate = remote.lastStudyDate;
+  }
+  if (changed) {
+    saveProgressLocal();
+    render();
+  }
+}
+function updateSyncStatus(status) {
+  const el = document.querySelector('.sync-status');
+  if (el) {
+    el.className = 'sync-status ' + status;
+    el.textContent = status === 'synced' ? 'Synced' : status === 'syncing' ? 'Syncing...' : 'Offline';
+  }
+}
+function connectStudyCode(code) {
+  progress.studyCode = code;
+  saveProgress();
+  if (firebaseReady && db) {
+    try { db.ref().off(); } catch(e) {}
+    pullFromFirebase();
+    db.ref('users/' + code).on('value', snap => {
+      if (snap.val()) mergeRemoteProgress(snap.val());
+    });
+  }
+}
+function saveProgressLocal() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(progress)); } catch(e) {}
+}
+function getChapterStats(chNum) {
+  const chQuestions = QUESTIONS.filter(q => q.chapter === chNum);
+  let attempted = 0, correct = 0, mastered = 0;
+  chQuestions.forEach(q => {
+    const h = progress.questionHistory[q.id];
+    if (h && h.attempts > 0) {
+      attempted++;
+      if (h.correct > 0) correct++;
+      if (h.correct >= 2) mastered++;
+    }
+  });
+  return {
+    total: chQuestions.length,
+    attempted, correct, mastered,
+    pct: attempted > 0 ? Math.round((correct / attempted) * 100) : 0,
+    masteryPct: chQuestions.length > 0 ? Math.round((mastered / chQuestions.length) * 100) : 0
+  };
+}
+function getBoardReadiness() {
+  let totalWeight = 0, weightedScore = 0;
+  CHAPTERS.forEach(ch => {
+    const stats = getChapterStats(ch.num);
+    const weight = stats.total;
+    const recency = getRecencyFactor(ch.num);
+    totalWeight += weight;
+    weightedScore += (stats.pct / 100) * weight * recency;
+  });
+  return totalWeight > 0 ? Math.round((weightedScore / totalWeight) * 100) : 0;
+}
+function getRecencyFactor(chNum) {
+  const chQuestions = QUESTIONS.filter(q => q.chapter === chNum);
+  let latestSeen = 0;
+  chQuestions.forEach(q => {
+    const h = progress.questionHistory[q.id];
+    if (h && h.lastSeen) latestSeen = Math.max(latestSeen, h.lastSeen);
+  });
+  if (!latestSeen) return 0.5;
+  const daysSince = (Date.now() - latestSeen) / 86400000;
+  if (daysSince < 7) return 1;
+  if (daysSince < 30) return 0.8;
+  return 0.6;
+}
+function getWeakQuestions() {
+  return QUESTIONS.filter(q => {
+    const h = progress.questionHistory[q.id];
+    return h && h.attempts > 0 && (h.correct / h.attempts) < 0.5;
+  });
+}
+function getUnseenQuestions() {
+  return QUESTIONS.filter(q => !progress.questionHistory[q.id]);
+}
+function addXP(amount) {
+  progress.xp += amount;
+  showXPPopup('+' + amount + ' XP');
+}
+function showXPPopup(text) {
+  const el = document.createElement('div');
+  el.className = 'xp-popup';
+  el.textContent = text;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 1100);
+}
+function showConfetti() {
+  const colors = ['#667eea','#48bb78','#ed8936','#f56565','#a3bffa'];
+  for (let i = 0; i < 30; i++) {
+    const c = document.createElement('div');
+    c.className = 'confetti';
+    c.style.left = Math.random() * 100 + 'vw';
+    c.style.animationDelay = Math.random() * 1 + 's';
+    c.style.background = colors[Math.floor(Math.random()*colors.length)];
+    c.style.width = (6 + Math.random()*8) + 'px';
+    c.style.height = (6 + Math.random()*8) + 'px';
+    c.style.borderRadius = Math.random() > .5 ? '50%' : '2px';
+    document.body.appendChild(c);
+    setTimeout(() => c.remove(), 4000);
+  }
+}
+function startQuiz(mode, chapters) {
+  let questions = [];
+  const chapterNums = chapters && chapters.length > 0 ? chapters : CHAPTERS.map(c => c.num);
+  if (mode === 'study') {
+    questions = QUESTIONS.filter(q => chapterNums.includes(q.chapter));
+    shuffleArray(questions);
+  } else if (mode === 'exam') {
+    const pool = QUESTIONS.filter(q => chapterNums.includes(q.chapter));
+    shuffleArray(pool);
+    questions = pool.slice(0, 50);
+  } else if (mode === 'weak') {
+    questions = getWeakQuestions().filter(q => chapterNums.includes(q.chapter));
+    shuffleArray(questions);
+    if (questions.length === 0) {
+      questions = getUnseenQuestions().filter(q => chapterNums.includes(q.chapter));
+      shuffleArray(questions);
+      questions = questions.slice(0, 20);
+    }
+  } else if (mode === 'quick10') {
+    const pool = QUESTIONS.filter(q => chapterNums.includes(q.chapter));
+    shuffleArray(pool);
+    questions = pool.slice(0, 10);
+  }
+  state.quizMode = mode;
+  state.quizQuestions = questions;
+  state.currentIndex = 0;
+  state.selectedAnswer = null;
+  state.answered = false;
+  state.sessionResults = [];
+  state.screen = 'quiz';
+  if (mode === 'exam') {
+    state.timerSeconds = 0;
+    clearInterval(state.timerInterval);
+    state.timerInterval = setInterval(() => {
+      state.timerSeconds++;
+      const timerEl = document.getElementById('quiz-timer');
+      if (timerEl) {
+        const mins = Math.floor(state.timerSeconds / 60);
+        const secs = state.timerSeconds % 60;
+        timerEl.textContent = mins+':'+secs.toString().padStart(2,'0');
+      }
+    }, 1000);
+  }
+  render();
+}
+function selectAnswer(letter) {
+  if (state.answered) return;
+  state.selectedAnswer = letter;
+  state.answered = true;
+  const q = state.quizQuestions[state.currentIndex];
+  const isCorrect = letter === q.correctAnswer;
+  if (!progress.questionHistory[q.id]) {
+    progress.questionHistory[q.id] = {attempts: 0, correct: 0, lastSeen: 0};
+  }
+  progress.questionHistory[q.id].attempts++;
+  if (isCorrect) progress.questionHistory[q.id].correct++;
+  progress.questionHistory[q.id].lastSeen = Date.now();
+  progress.totalQuestions++;
+  if (isCorrect) progress.totalCorrect++;
+  state.sessionResults.push({questionId: q.id, correct: isCorrect});
+  recordStudyToday();
+  if (isCorrect) addXP(10);
+  else addXP(2);
+  saveProgress();
+  renderQuizQuestion();
+}
+function nextQuestion() {
+  if (state.currentIndex < state.quizQuestions.length - 1) {
+    state.currentIndex++;
+    state.selectedAnswer = null;
+    state.answered = false;
+    renderQuizQuestion();
+    window.scrollTo(0, 0);
+  } else {
+    finishQuiz();
+  }
+}
+function finishQuiz() {
+  clearInterval(state.timerInterval);
+  const correct = state.sessionResults.filter(r => r.correct).length;
+  const total = state.sessionResults.length;
+  progress.sessionHistory.push({
+    date: Date.now(),
+    mode: state.quizMode,
+    score: correct,
+    total: total,
+    chapters: [...new Set(state.quizQuestions.map(q => q.chapter))]
+  });
+  saveProgress();
+  if (correct / total >= 0.8) showConfetti();
+  state.screen = 'results';
+  render();
+}
+function startFlashcards(chapters) {
+  const chapterNums = chapters && chapters.length > 0 ? chapters : CHAPTERS.map(c => c.num);
+  const cards = FLASHCARDS.filter(c => chapterNums.includes(c.chapter));
+  shuffleArray(cards);
+  state.flashcards = cards;
+  state.flashcardIndex = 0;
+  state.flashcardFlipped = false;
+  state.screen = 'flashcards';
+  render();
+}
+function flipCard() {
+  state.flashcardFlipped = !state.flashcardFlipped;
+  render();
+}
+function flashcardResponse(knew) {
+  const card = state.flashcards[state.flashcardIndex];
+  if (!progress.flashcardHistory[card.id]) {
+    progress.flashcardHistory[card.id] = {seen: 0, knew: 0};
+  }
+  progress.flashcardHistory[card.id].seen++;
+  if (knew) progress.flashcardHistory[card.id].knew++;
+  recordStudyToday();
+  addXP(knew ? 5 : 2);
+  saveProgress();
+  if (state.flashcardIndex < state.flashcards.length - 1) {
+    state.flashcardIndex++;
+    state.flashcardFlipped = false;
+  } else {
+    state.screen = 'dashboard';
+  }
+  render();
+}
+function shuffleArray(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+function escHtml(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+function render() {
+  const app = document.getElementById('app');
+  switch(state.screen) {
+    case 'dashboard': renderDashboard(app); break;
+    case 'modes': renderModes(app); break;
+    case 'chapterSelect': renderChapterSelect(app); break;
+    case 'quiz': renderQuiz(app); break;
+    case 'results': renderResults(app); break;
+    case 'flashcards': renderFlashcardScreen(app); break;
+    case 'stats': renderStatsScreen(app); break;
+    case 'settings': renderSettings(app); break;
+  }
+}
+function renderDashboard(app) {
+  const readiness = getBoardReadiness();
+  const weak = getWeakQuestions().length;
+  const totalAttempted = Object.keys(progress.questionHistory).length;
+  let html = '<div class="header"><h1>EndoBoard</h1><div class="subtitle">ABE Board Review</div>'+(progress.studyCode ? '<div class="sync-status synced" style="font-size:11px;margin-top:4px">Synced</div>' : '')+'</div>';
+  if (progress.streak > 0) {
+    html += '<div class="streak-banner"><span class="fire">&#x1F525;</span> '+progress.streak+' day streak!</div>';
+  }
+  const circ = 2 * Math.PI * 45;
+  const offset = circ - (readiness / 100) * circ;
+  const readColor = readiness >= 70 ? 'var(--success)' : readiness >= 40 ? 'var(--warning)' : 'var(--danger)';
+  html += '<div class="card text-center"><div class="readiness-ring"><svg width="120" height="120"><circle cx="60" cy="60" r="45" fill="none" stroke="var(--border)" stroke-width="8"/><circle cx="60" cy="60" r="45" fill="none" stroke="'+readColor+'" stroke-width="8" stroke-dasharray="'+circ+'" stroke-dashoffset="'+offset+'" stroke-linecap="round"/></svg><div class="score">'+readiness+'</div></div><div class="readiness-label">Board Readiness Score</div></div>';
+  html += '<div class="stats-row"><div class="stat-card"><div class="stat-value">'+progress.xp+'</div><div class="stat-label">XP</div></div><div class="stat-card"><div class="stat-value">'+totalAttempted+'/'+QUESTIONS.length+'</div><div class="stat-label">Questions</div></div><div class="stat-card"><div class="stat-value">'+(progress.totalQuestions > 0 ? Math.round(progress.totalCorrect/progress.totalQuestions*100) : 0)+'%</div><div class="stat-label">Accuracy</div></div></div>';
+  html += '<div class="card"><div class="card-title">Quick Start</div><div class="mode-grid"><div class="mode-btn" onclick="state.quizMode=\'quick10\';state.screen=\'chapterSelect\';render()"><div class="mode-icon">&#x26A1;</div><div class="mode-name">Quick 10</div><div class="mode-desc">5 min sprint</div></div><div class="mode-btn" onclick="state.quizMode=\'weak\';startQuiz(\'weak\',[])"><div class="mode-icon">&#x1F3AF;</div><div class="mode-name">Weak Areas</div><div class="mode-desc">'+weak+' questions</div></div><div class="mode-btn" onclick="state.quizMode=\'study\';state.screen=\'chapterSelect\';render()"><div class="mode-icon">&#x1F4DA;</div><div class="mode-name">Study</div><div class="mode-desc">By chapter</div></div><div class="mode-btn" onclick="state.quizMode=\'exam\';state.screen=\'chapterSelect\';render()"><div class="mode-icon">&#x1F3C6;</div><div class="mode-name">Exam Sim</div><div class="mode-desc">50 Q, timed</div></div></div><div style="margin-top:12px"><div class="mode-btn" style="display:block;width:100%" onclick="state.screen=\'chapterSelect\';state.quizMode=\'flashcards\';render()"><div class="mode-icon">&#x1F4A1;</div><div class="mode-name">High-Yield Flashcards</div><div class="mode-desc">'+FLASHCARDS.length+' key facts</div></div></div></div>';
+  html += '<div class="card"><div class="card-title">Chapters</div>';
+  CHAPTERS.forEach(ch => {
+    const s = getChapterStats(ch.num);
+    const barColor = s.pct >= 80 ? 'var(--success)' : s.pct >= 50 ? 'var(--warning)' : s.pct > 0 ? 'var(--danger)' : 'var(--border)';
+    const numClass = s.masteryPct >= 80 ? 'mastered' : s.masteryPct >= 30 ? 'learning' : '';
+    html += '<div class="chapter-item" onclick="state.selectedChapters=['+ch.num+'];startQuiz(\'study\',['+ch.num+'])"><div class="chapter-num '+numClass+'">'+ch.num+'</div><div class="chapter-info"><div class="chapter-name">'+escHtml(ch.title)+'</div><div class="chapter-progress">'+s.attempted+'/'+s.total+' attempted &middot; '+s.pct+'% correct</div><div class="chapter-bar"><div class="chapter-bar-fill" style="width:'+(s.attempted > 0 ? Math.max(4, s.pct) : 0)+'%;background:'+barColor+'"></div></div></div></div>';
+  });
+  html += '</div>';
+  html += renderBottomNav('dashboard');
+  app.innerHTML = html;
+}
+function renderChapterSelect(app) {
+  let html = '<div class="quiz-header"><button class="quiz-back" onclick="state.screen=\'dashboard\';render()">&#x2190; Back</button><span class="quiz-progress-text">Select Chapters</span><span></span></div><div class="card"><div class="card-title">'+(state.quizMode === 'flashcards' ? 'Flashcard' : 'Quiz')+' - Pick Chapters</div><div class="chapter-select-grid"><div class="ch-select-btn '+(state.selectedChapters.length === 0 ? 'selected' : '')+'" onclick="state.selectedChapters=[];render()">All</div>';
+  CHAPTERS.forEach(ch => {
+    const sel = state.selectedChapters.includes(ch.num) ? 'selected' : '';
+    html += '<div class="ch-select-btn '+sel+'" onclick="toggleChapter('+ch.num+')">'+ch.short+'</div>';
+  });
+  html += '</div><button class="next-btn" onclick="'+(state.quizMode === 'flashcards' ? 'startFlashcards(state.selectedChapters)' : 'startQuiz(state.quizMode, state.selectedChapters)')+'">Start</button></div>';
+  app.innerHTML = html;
+}
+function toggleChapter(num) {
+  const idx = state.selectedChapters.indexOf(num);
+  if (idx >= 0) state.selectedChapters.splice(idx, 1);
+  else state.selectedChapters.push(num);
+  render();
+}
+function renderQuiz(app) {
+  if (state.quizQuestions.length === 0) {
+    app.innerHTML = '<div class="quiz-header"><button class="quiz-back" onclick="state.screen=\'dashboard\';render()">&#x2190; Back</button><span class="quiz-progress-text">No Questions</span><span></span></div><div class="card text-center" style="margin-top:40px"><div style="font-size:48px;margin-bottom:16px">&#x2705;</div><h3>All caught up!</h3><p style="color:var(--text-secondary);margin-top:8px">No weak areas to review. Try Study mode or Quick 10!</p><button class="next-btn" onclick="state.screen=\'dashboard\';render()">Back to Dashboard</button></div>';
+    return;
+  }
+  let html = '<div class="quiz-header"><button class="quiz-back" onclick="if(confirm(\'End quiz?\')){clearInterval(state.timerInterval);state.screen=\'dashboard\';render()}">&#x2190;</button><span class="quiz-progress-text">'+(state.currentIndex + 1)+' / '+state.quizQuestions.length+'</span>'+(state.quizMode === 'exam' ? '<span class="quiz-timer" id="quiz-timer">0:00</span>' : '<span></span>')+'</div><div id="quiz-question-area"></div>';
+  app.innerHTML = html;
+  renderQuizQuestion();
+}
+function renderQuizQuestion() {
+  const area = document.getElementById('quiz-question-area');
+  if (!area) { render(); return; }
+  const q = state.quizQuestions[state.currentIndex];
+  const chTitle = CHAPTERS.find(c => c.num === q.chapter)?.short || '';
+  let html = '<div class="question-card"><div class="q-number">Ch'+q.chapter+' &middot; '+escHtml(chTitle)+' &middot; Q'+q.number+'</div><div class="q-text">'+escHtml(q.question)+'</div>';
+  q.options.forEach(opt => {
+    let cls = 'option-btn';
+    if (state.answered) {
+      if (opt.letter === q.correctAnswer) cls += ' correct show-correct';
+      else if (opt.letter === state.selectedAnswer && opt.letter !== q.correctAnswer) cls += ' incorrect';
+    } else if (state.selectedAnswer === opt.letter) {
+      cls += ' selected';
+    }
+    html += '<button class="'+cls+'" onclick="selectAnswer(\''+opt.letter+'\')"><span class="option-letter">'+opt.letter+'.</span> '+escHtml(opt.text)+'</button>';
+  });
+  html += '<div class="explanation-box '+(state.answered ? 'show' : '')+'"><strong>'+(state.selectedAnswer === q.correctAnswer ? '&#x2705; Correct!' : '&#x274C; Incorrect')+'</strong><br>'+escHtml(q.explanation)+'</div></div>';
+  if (state.answered) {
+    const isLast = state.currentIndex >= state.quizQuestions.length - 1;
+    html += '<button class="next-btn" onclick="nextQuestion()">'+(isLast ? 'See Results' : 'Next Question')+'</button>';
+  }
+  area.innerHTML = html;
+}
+function renderResults(app) {
+  const correct = state.sessionResults.filter(r => r.correct).length;
+  const total = state.sessionResults.length;
+  const pct = total > 0 ? Math.round(correct/total*100) : 0;
+  const emoji = pct >= 90 ? '&#x1F929;' : pct >= 70 ? '&#x1F44F;' : pct >= 50 ? '&#x1F4AA;' : '&#x1F4DA;';
+  const message = pct >= 90 ? 'Outstanding!' : pct >= 70 ? 'Great work!' : pct >= 50 ? 'Keep going!' : 'Review time!';
+  let html = '<div class="quiz-header"><button class="quiz-back" onclick="state.screen=\'dashboard\';render()">&#x2190; Done</button><span class="quiz-progress-text">Results</span><span></span></div><div class="results-container"><div style="font-size:48px;margin-bottom:8px">'+emoji+'</div><div class="results-score">'+pct+'%</div><div class="results-label">'+correct+'/'+total+' correct &middot; '+message+'</div><div style="font-size:14px;color:var(--success);margin-bottom:24px">+'+(correct*10 + (total-correct)*2)+' XP earned</div></div><div class="card"><div class="card-title">Review Missed Questions</div><div class="results-breakdown">';
+  state.sessionResults.forEach((r, i) => {
+    if (!r.correct) {
+      const q = state.quizQuestions[i];
+      html += '<div class="result-item"><div class="result-q"><strong>Ch'+q.chapter+' Q'+q.number+':</strong> '+escHtml(q.question.substring(0,80))+'...</div><div class="result-badge incorrect">&#x274C;</div></div>';
+    }
+  });
+  if (state.sessionResults.every(r => r.correct)) {
+    html += '<p style="text-align:center;color:var(--success);padding:16px">Perfect score!</p>';
+  }
+  html += '</div></div><button class="next-btn" onclick="state.screen=\'dashboard\';render()">Back to Dashboard</button>';
+  html += renderBottomNav('dashboard');
+  app.innerHTML = html;
+}
+function renderFlashcardScreen(app) {
+  if (!state.flashcards || state.flashcards.length === 0) {
+    app.innerHTML = '<div class="card text-center mt-16"><p>No flashcards available.</p><button class="next-btn" onclick="state.screen=\'dashboard\';render()">Back</button></div>';
+    return;
+  }
+  const card = state.flashcards[state.flashcardIndex];
+  const chTitle = CHAPTERS.find(c => c.num === card.chapter)?.short || '';
+  let html = '<div class="quiz-header"><button class="quiz-back" onclick="state.screen=\'dashboard\';render()">&#x2190;</button><span class="quiz-progress-text">'+(state.flashcardIndex + 1)+' / '+state.flashcards.length+'</span><span class="quiz-progress-text">Ch'+card.chapter+' '+chTitle+'</span></div><div class="flashcard-container" onclick="flipCard()"><div class="flashcard '+(state.flashcardFlipped ? 'flipped' : '')+'"><div class="flashcard-face flashcard-front"><div>'+escHtml(card.front)+'</div><div class="flashcard-hint">Tap to reveal</div></div><div class="flashcard-face flashcard-back"><div>'+escHtml(card.back)+'</div></div></div></div>';
+  if (state.flashcardFlipped) {
+    html += '<div class="flashcard-nav"><button class="study-more" onclick="event.stopPropagation();flashcardResponse(false)">&#x1F504; Study More</button><button class="knew-it" onclick="event.stopPropagation();flashcardResponse(true)">&#x2705; Knew It</button></div>';
+  }
+  app.innerHTML = html;
+}
+function renderStatsScreen(app) {
+  let html = '<div class="header"><h1>Your Progress</h1><div class="subtitle">Performance over time</div></div>';
+  html += '<div class="card"><div class="card-title">Score by Chapter</div><div class="chart-bar-group">';
+  CHAPTERS.forEach(ch => {
+    const s = getChapterStats(ch.num);
+    const h = Math.max(4, (s.pct / 100) * 140);
+    const color = s.pct >= 80 ? 'var(--success)' : s.pct >= 50 ? 'var(--warning)' : s.pct > 0 ? 'var(--danger)' : 'var(--border)';
+    html += '<div class="chart-bar-wrapper"><div class="chart-percent">'+s.pct+'%</div><div class="chart-bar" style="height:'+h+'px;background:'+color+'"></div><div class="chart-bar-label">'+ch.short+'</div></div>';
+  });
+  html += '</div></div>';
+  html += '<div class="card"><div class="card-title">Recent Sessions</div>';
+  const recent = [...progress.sessionHistory].reverse().slice(0, 10);
+  if (recent.length === 0) {
+    html += '<p style="color:var(--text-secondary);text-align:center;padding:16px">No sessions yet. Start studying!</p>';
+  } else {
+    recent.forEach(s => {
+      const date = new Date(s.date);
+      const dateStr = date.toLocaleDateString('en-US', {month:'short', day:'numeric'});
+      const pct = Math.round(s.score/s.total*100);
+      const color = pct >= 80 ? 'var(--success)' : pct >= 50 ? 'var(--warning)' : 'var(--danger)';
+      html += '<div class="result-item"><div class="result-q">'+dateStr+' &middot; '+s.mode+' &middot; '+s.score+'/'+s.total+'</div><div class="result-badge" style="background:'+color+';color:white">'+pct+'%</div></div>';
+    });
+  }
+  html += '</div>';
+  html += '<div class="card"><div class="card-title">Lifetime Stats</div><div class="stats-row" style="margin:0"><div class="stat-card"><div class="stat-value">'+progress.totalQuestions+'</div><div class="stat-label">Answered</div></div><div class="stat-card"><div class="stat-value">'+progress.streak+'</div><div class="stat-label">Day Streak</div></div><div class="stat-card"><div class="stat-value">'+progress.xp+'</div><div class="stat-label">Total XP</div></div></div></div>';
+  html += renderBottomNav('stats');
+  app.innerHTML = html;
+}
+function renderSettings(app) {
+  let html = '<div class="header"><h1>Settings</h1><div class="subtitle">Sync & Preferences</div></div><div class="card"><div class="card-title">Firebase Sync</div><p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px">To sync progress across devices, set up a free Firebase project and enter your config below. Then use the same Study Code on all your devices.</p><div style="margin-bottom:12px"><label style="font-size:12px;font-weight:600;color:var(--text-secondary)">Your Study Code</label><div style="display:flex;gap:8px;margin-top:4px"><input id="sync-code" type="text" value="'+(progress.studyCode || '')+'" placeholder="e.g. ENDO-7K3M" style="flex:1;padding:10px;border-radius:8px;border:2px solid var(--border);font-size:16px;font-family:monospace;background:var(--bg);color:var(--text)"><button onclick="generateCode()" style="padding:10px 16px;border-radius:8px;border:2px solid var(--primary);background:none;color:var(--primary);font-weight:600;cursor:pointer">Generate</button></div></div><button onclick="saveStudyCode()" class="next-btn" style="margin:0;width:100%">Save Code</button></div><div class="card"><div class="card-title">Data Management</div><button onclick="exportProgress()" style="display:block;width:100%;padding:12px;margin-bottom:8px;border-radius:8px;border:2px solid var(--primary);background:none;color:var(--primary);font-weight:600;cursor:pointer">Export Progress (JSON)</button><label style="display:block;width:100%;padding:12px;margin-bottom:8px;border-radius:8px;border:2px solid var(--success);background:none;color:var(--success);font-weight:600;cursor:pointer;text-align:center">Import Progress<input type="file" accept=".json" onchange="importProgress(event)" style="display:none"></label><button onclick="if(confirm(\'Reset ALL progress? This cannot be undone.\')){progress=getDefaultProgress();saveProgress();render()}" style="display:block;width:100%;padding:12px;border-radius:8px;border:2px solid var(--danger);background:none;color:var(--danger);font-weight:600;cursor:pointer">Reset All Progress</button></div><div class="card"><div class="card-title">About</div><p style="font-size:13px;color:var(--text-secondary)">EndoBoard v1.0<br>'+QUESTIONS.length+' MCQs &middot; '+FLASHCARDS.length+' Flashcards<br>13 Chapters from the Blue Book<br><br>Built for ABE Board Prep</p></div>';
+  html += renderBottomNav('settings');
+  app.innerHTML = html;
+}
+function renderBottomNav(active) {
+  return '<div class="bottom-nav"><button class="nav-item '+(active==='dashboard'?'active':'')+'" onclick="state.screen=\'dashboard\';render()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>Home</button><button class="nav-item '+(active==='stats'?'active':'')+'" onclick="state.screen=\'stats\';render()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Stats</button><button class="nav-item '+(active==='settings'?'active':'')+'" onclick="state.screen=\'settings\';render()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Settings</button></div>';
+}
+function generateCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = 'ENDO-';
+  for (let i = 0; i < 4; i++) code += chars[Math.floor(Math.random()*chars.length)];
+  document.getElementById('sync-code').value = code;
+}
+function saveStudyCode() {
+  const code = document.getElementById('sync-code').value.trim();
+  if (code) {
+    connectStudyCode(code);
+    alert('Study code saved and syncing! Use this same code on your other devices: ' + code);
+    render();
+  }
+}
+function exportProgress() {
+  const data = JSON.stringify(progress, null, 2);
+  const blob = new Blob([data], {type: 'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'endoboard_progress_' + new Date().toISOString().slice(0,10) + '.json';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+function importProgress(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const imported = JSON.parse(e.target.result);
+      progress = {...getDefaultProgress(), ...imported};
+      saveProgress();
+      render();
+      alert('Progress imported successfully!');
+    } catch(err) {
+      alert('Invalid file format');
+    }
+  };
+  reader.readAsText(file);
+}
+loadProgress();
+initFirebase();
+render();
+</script>
+</body>
+</html>

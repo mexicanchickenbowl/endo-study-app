@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "Static File Server (Python)",
+      "runtimeExecutable": "python3",
+      "runtimeArgs": ["-m", "http.server", "3000"],
+      "port": 3000
+    },
+    {
+      "name": "Static File Server (npx serve)",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "-l", "5000"],
+      "port": 5000
+    }
+  ]
+}
