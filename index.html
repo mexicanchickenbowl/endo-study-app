@@ -505,6 +505,140 @@ body {
   0%   { transform: translateY(0) rotate(0);    opacity: 1; }
   100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
 }
+.auth-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 24px;
+}
+.auth-card {
+  background: white;
+  border-radius: 24px;
+  padding: 40px 36px;
+  width: 100%;
+  max-width: 420px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.2);
+}
+.auth-logo {
+  font-size: 28px;
+  font-weight: 800;
+  color: var(--primary);
+  text-align: center;
+  margin-bottom: 6px;
+  letter-spacing: -1px;
+}
+.auth-tagline {
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 32px;
+  font-weight: 500;
+}
+.auth-tabs {
+  display: flex;
+  background: #f1f5f9;
+  border-radius: 12px;
+  padding: 4px;
+  margin-bottom: 24px;
+  gap: 4px;
+}
+.auth-tab {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  border-radius: 9px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: var(--transition);
+  background: transparent;
+  color: var(--text-secondary);
+}
+.auth-tab.active {
+  background: white;
+  color: var(--primary);
+  box-shadow: 0 1px 4px rgba(0,0,0,.1);
+}
+.auth-field {
+  margin-bottom: 16px;
+}
+.auth-field label {
+  display: block;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  margin-bottom: 6px;
+}
+.auth-field input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  font-size: 16px;
+  font-family: inherit;
+  color: var(--text);
+  background: var(--bg);
+  transition: var(--transition);
+  outline: none;
+}
+.auth-field input:focus {
+  border-color: var(--primary);
+  background: white;
+}
+.auth-submit {
+  width: 100%;
+  padding: 14px;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: white;
+  border: none;
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  margin-top: 8px;
+  transition: var(--transition);
+  box-shadow: 0 4px 16px rgba(99,102,241,.35);
+}
+.auth-submit:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(99,102,241,.45); }
+.auth-submit:disabled { opacity: .6; cursor: not-allowed; transform: none; }
+.auth-error {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border: 1px solid var(--danger);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 16px;
+  display: none;
+}
+.auth-error.show { display: block; }
+.user-badge {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  background: var(--primary-glow);
+  border-radius: var(--radius-sm);
+  margin-bottom: 16px;
+}
+.user-badge-avatar {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: white;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 14px; font-weight: 700; flex-shrink: 0;
+}
+.user-badge-info { flex: 1; }
+.user-badge-email { font-size: 13px; font-weight: 600; color: var(--text); }
+.user-badge-status { font-size: 11px; color: var(--success); font-weight: 500; }
 .spinner {
   width: 40px; height: 40px;
   border: 4px solid var(--border); border-top-color: var(--primary);
@@ -543,7 +677,8 @@ const CHAPTERS = [
   {num:13,title:"Complications",short:"Comp"}
 ];
 let state = {
-  screen: 'dashboard',
+  screen: 'loading',
+  authTab: 'signin',
   quizMode: null,
   quizQuestions: [],
   currentIndex: 0,
@@ -566,7 +701,6 @@ function getDefaultProgress() {
     questionHistory: {},
     sessionHistory: [],
     flashcardHistory: {},
-    studyCode: null,
     totalQuestions: 0,
     totalCorrect: 0,
   };
@@ -612,55 +746,105 @@ function recordStudyToday() {
 let firebaseReady = false;
 let db = null;
 let authUser = null;
+
 function initFirebase() {
   const config = window.FIREBASE_CONFIG;
-  if (!config) return;
+  if (!config || typeof firebase === 'undefined') {
+    state.screen = 'login';
+    render();
+    return;
+  }
   try {
-    if (typeof firebase !== 'undefined') {
-      firebase.initializeApp(config);
-      db = firebase.database();
-      // Sign in anonymously for security
-      firebase.auth().signInAnonymously()
-        .then((cred) => {
-          authUser = cred.user;
-          firebaseReady = true;
-          console.log('Firebase connected & authenticated (uid: ' + authUser.uid + ')');
-          if (progress.studyCode) {
-            pullFromFirebase();
-            db.ref('users/' + progress.studyCode).on('value', snap => {
-              if (snap.val()) mergeRemoteProgress(snap.val());
-            });
-          }
-          updateSyncStatus('synced');
-        })
-        .catch((e) => {
-          console.log('Firebase auth error:', e);
-          updateSyncStatus('offline');
+    firebase.initializeApp(config);
+    db = firebase.database();
+    // Listen for auth state changes
+    firebase.auth().onAuthStateChanged(user => {
+      if (user) {
+        authUser = user;
+        firebaseReady = true;
+        loadProgressFromFirebase(() => {
+          state.screen = 'dashboard';
+          render();
         });
-    }
-  } catch(e) { console.log('Firebase init error:', e); updateSyncStatus('offline'); }
+      } else {
+        authUser = null;
+        firebaseReady = false;
+        state.screen = 'login';
+        render();
+      }
+    });
+  } catch(e) {
+    console.error('Firebase init error:', e);
+    state.screen = 'login';
+    render();
+  }
 }
+
+function signIn(email, password) {
+  return firebase.auth().signInWithEmailAndPassword(email, password);
+}
+
+function signUp(email, password) {
+  return firebase.auth().createUserWithEmailAndPassword(email, password);
+}
+
+function signOut() {
+  firebase.auth().signOut().then(() => {
+    progress = getDefaultProgress();
+    localStorage.removeItem(STORAGE_KEY);
+    state.screen = 'login';
+    render();
+  });
+}
+
+function loadProgressFromFirebase(callback) {
+  if (!authUser || !db) { if (callback) callback(); return; }
+  updateSyncStatus('syncing');
+  db.ref('users/' + authUser.uid + '/progress').once('value', snap => {
+    const remote = snap.val();
+    if (remote) {
+      // Merge remote into local
+      progress = { ...getDefaultProgress(), ...remote };
+      saveProgressLocal();
+    } else {
+      // First time — push local progress up
+      loadProgress();
+    }
+    updateStreak();
+    updateSyncStatus('synced');
+    if (callback) callback();
+    // Live listener for multi-device sync
+    db.ref('users/' + authUser.uid + '/progress').on('value', snap => {
+      const r = snap.val();
+      if (r) mergeRemoteProgress(r);
+    });
+  });
+}
+
 function syncToFirebase() {
-  if (!firebaseReady || !db || !progress.studyCode) return;
+  if (!firebaseReady || !db || !authUser) return;
   updateSyncStatus('syncing');
   try {
-    db.ref('users/' + progress.studyCode).set({
+    db.ref('users/' + authUser.uid + '/progress').set({
       ...progress,
-      lastSyncDevice: navigator.userAgent.substring(0,50),
       lastSyncTime: Date.now()
-    }).then(() => updateSyncStatus('synced'))
-      .catch(() => updateSyncStatus('offline'));
+    })
+    .then(() => updateSyncStatus('synced'))
+    .catch(() => updateSyncStatus('offline'));
   } catch(e) { updateSyncStatus('offline'); }
 }
-function pullFromFirebase() {
-  if (!firebaseReady || !db || !progress.studyCode) return;
-  try {
-    db.ref('users/' + progress.studyCode).once('value', snap => {
-      if (snap.val()) mergeRemoteProgress(snap.val());
-    });
-  } catch(e) {}
+
+function saveProgress() {
+  saveProgressLocal();
+  syncToFirebase();
 }
+
+function saveProgressLocal() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(progress)); } catch(e) {}
+}
+
 function mergeRemoteProgress(remote) {
+  if (!remote) return;
   let changed = false;
   if (remote.questionHistory) {
     Object.keys(remote.questionHistory).forEach(qid => {
@@ -696,36 +880,24 @@ function mergeRemoteProgress(remote) {
   if ((remote.streak||0) > progress.streak) { progress.streak = remote.streak; changed = true; }
   if ((remote.totalQuestions||0) > progress.totalQuestions) { progress.totalQuestions = remote.totalQuestions; changed = true; }
   if ((remote.totalCorrect||0) > progress.totalCorrect) { progress.totalCorrect = remote.totalCorrect; changed = true; }
-  if (remote.studyCode) progress.studyCode = remote.studyCode;
   if (remote.lastStudyDate && (!progress.lastStudyDate || remote.lastStudyDate > progress.lastStudyDate)) {
     progress.lastStudyDate = remote.lastStudyDate;
+    changed = true;
   }
   if (changed) {
     saveProgressLocal();
     render();
   }
 }
+
 function updateSyncStatus(status) {
   const el = document.querySelector('.sync-status');
   if (el) {
     el.className = 'sync-status ' + status;
-    el.textContent = status === 'synced' ? 'Synced' : status === 'syncing' ? 'Syncing...' : 'Offline';
+    el.textContent = status === 'synced' ? '● Synced' : status === 'syncing' ? '● Syncing...' : '● Offline';
   }
 }
-function connectStudyCode(code) {
-  progress.studyCode = code;
-  saveProgress();
-  if (firebaseReady && db) {
-    try { db.ref().off(); } catch(e) {}
-    pullFromFirebase();
-    db.ref('users/' + code).on('value', snap => {
-      if (snap.val()) mergeRemoteProgress(snap.val());
-    });
-  }
-}
-function saveProgressLocal() {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(progress)); } catch(e) {}
-}
+
 function getChapterStats(chNum) {
   const chQuestions = QUESTIONS.filter(q => q.chapter === chNum);
   let attempted = 0, correct = 0, mastered = 0;
@@ -943,21 +1115,89 @@ function escHtml(str) {
 function render() {
   const app = document.getElementById('app');
   switch(state.screen) {
+    case 'loading':   renderLoading(app); break;
+    case 'login':     renderLogin(app); break;
     case 'dashboard': renderDashboard(app); break;
-    case 'modes': renderModes(app); break;
+    case 'modes':     renderModes(app); break;
     case 'chapterSelect': renderChapterSelect(app); break;
-    case 'quiz': renderQuiz(app); break;
-    case 'results': renderResults(app); break;
+    case 'quiz':      renderQuiz(app); break;
+    case 'results':   renderResults(app); break;
     case 'flashcards': renderFlashcardScreen(app); break;
-    case 'stats': renderStatsScreen(app); break;
-    case 'settings': renderSettings(app); break;
+    case 'stats':     renderStatsScreen(app); break;
+    case 'settings':  renderSettings(app); break;
   }
+}
+
+function renderLoading(app) {
+  app.innerHTML = '<div class="auth-screen"><div style="text-align:center;color:white"><div style="font-size:32px;font-weight:800;letter-spacing:-1px;margin-bottom:8px">EndoBoard</div><div style="opacity:.8;font-size:14px">Loading...</div><div class="spinner" style="border-color:rgba(255,255,255,.3);border-top-color:white;margin:24px auto"></div></div></div>';
+}
+
+function renderLogin(app) {
+  const isSignUp = state.authTab === 'signup';
+  app.innerHTML = `<div class="auth-screen">
+    <div class="auth-card">
+      <div class="auth-logo">EndoBoard</div>
+      <div class="auth-tagline">ABE Board Prep · 1295 Questions</div>
+      <div class="auth-tabs">
+        <button class="auth-tab ${!isSignUp ? 'active' : ''}" onclick="state.authTab='signin';render()">Sign In</button>
+        <button class="auth-tab ${isSignUp ? 'active' : ''}" onclick="state.authTab='signup';render()">Create Account</button>
+      </div>
+      <div id="auth-error" class="auth-error"></div>
+      <div class="auth-field">
+        <label>Email</label>
+        <input id="auth-email" type="email" placeholder="your@email.com" autocomplete="email" />
+      </div>
+      <div class="auth-field">
+        <label>Password</label>
+        <input id="auth-password" type="password" placeholder="Password (min 6 chars)" autocomplete="${isSignUp ? 'new-password' : 'current-password'}" />
+      </div>
+      <button class="auth-submit" id="auth-btn" onclick="handleAuth()">${isSignUp ? 'Create Account' : 'Sign In'}</button>
+    </div>
+  </div>`;
+  // Focus email field
+  setTimeout(() => {
+    const el = document.getElementById('auth-email');
+    if (el) el.focus();
+    // Allow enter key
+    document.getElementById('auth-password').addEventListener('keydown', e => {
+      if (e.key === 'Enter') handleAuth();
+    });
+  }, 50);
+}
+
+function handleAuth() {
+  const email = document.getElementById('auth-email')?.value?.trim();
+  const password = document.getElementById('auth-password')?.value;
+  const errEl = document.getElementById('auth-error');
+  const btn = document.getElementById('auth-btn');
+  if (!email || !password) {
+    showAuthError('Please enter your email and password.');
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = 'Please wait...';
+  const fn = state.authTab === 'signup' ? signUp : signIn;
+  fn(email, password).catch(err => {
+    btn.disabled = false;
+    btn.textContent = state.authTab === 'signup' ? 'Create Account' : 'Sign In';
+    let msg = err.message;
+    if (err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') msg = 'Incorrect email or password.';
+    if (err.code === 'auth/email-already-in-use') msg = 'Account already exists. Try signing in.';
+    if (err.code === 'auth/weak-password') msg = 'Password must be at least 6 characters.';
+    if (err.code === 'auth/invalid-email') msg = 'Please enter a valid email address.';
+    showAuthError(msg);
+  });
+}
+
+function showAuthError(msg) {
+  const el = document.getElementById('auth-error');
+  if (el) { el.textContent = msg; el.classList.add('show'); }
 }
 function renderDashboard(app) {
   const readiness = getBoardReadiness();
   const weak = getWeakQuestions().length;
   const totalAttempted = Object.keys(progress.questionHistory).length;
-  let html = '<div class="page-inner"><div class="header"><h1>EndoBoard</h1><div class="subtitle">ABE Board Review</div>'+(progress.studyCode ? '<div class="sync-status synced" style="font-size:11px;margin-top:4px">Synced</div>' : '')+'</div>';
+  let html = '<div class="page-inner"><div class="header"><h1>EndoBoard</h1><div class="subtitle">ABE Board Review</div>' + (authUser ? '<div class="sync-status synced" style="font-size:11px;margin-top:4px">&#x25CF; Synced &middot; ' + escHtml(authUser.email) + '</div>' : '') + '</div>';
   if (progress.streak > 0) {
     html += '<div class="streak-banner"><span class="fire">&#x1F525;</span> '+progress.streak+' day streak!</div>';
   }
@@ -1097,8 +1337,28 @@ function renderStatsScreen(app) {
   app.innerHTML = html;
 }
 function renderSettings(app) {
-  let html = '<div class="page-inner"><div class="header"><h1>Settings</h1><div class="subtitle">Sync & Preferences</div></div><div class="card"><div class="card-title">Firebase Sync</div><p style="font-size:13px;color:var(--text-secondary);margin-bottom:12px">To sync progress across devices, set up a free Firebase project and enter your config below. Then use the same Study Code on all your devices.</p><div style="margin-bottom:12px"><label style="font-size:12px;font-weight:600;color:var(--text-secondary)">Your Study Code</label><div style="display:flex;gap:8px;margin-top:4px"><input id="sync-code" type="text" value="'+(progress.studyCode || '')+'" placeholder="e.g. ENDO-7K3M" style="flex:1;padding:10px;border-radius:8px;border:2px solid var(--border);font-size:16px;font-family:monospace;background:var(--bg);color:var(--text)"><button onclick="generateCode()" style="padding:10px 16px;border-radius:8px;border:2px solid var(--primary);background:none;color:var(--primary);font-weight:600;cursor:pointer">Generate</button></div></div><button onclick="saveStudyCode()" class="next-btn" style="margin:0;width:100%">Save Code</button></div><div class="card"><div class="card-title">Data Management</div><button onclick="exportProgress()" style="display:block;width:100%;padding:12px;margin-bottom:8px;border-radius:8px;border:2px solid var(--primary);background:none;color:var(--primary);font-weight:600;cursor:pointer">Export Progress (JSON)</button><label style="display:block;width:100%;padding:12px;margin-bottom:8px;border-radius:8px;border:2px solid var(--success);background:none;color:var(--success);font-weight:600;cursor:pointer;text-align:center">Import Progress<input type="file" accept=".json" onchange="importProgress(event)" style="display:none"></label><button onclick="if(confirm(\'Reset ALL progress? This cannot be undone.\')){progress=getDefaultProgress();saveProgress();render()}" style="display:block;width:100%;padding:12px;border-radius:8px;border:2px solid var(--danger);background:none;color:var(--danger);font-weight:600;cursor:pointer">Reset All Progress</button></div><div class="card"><div class="card-title">About</div><p style="font-size:13px;color:var(--text-secondary)">EndoBoard v1.0<br>'+QUESTIONS.length+' MCQs &middot; '+FLASHCARDS.length+' Flashcards<br>13 Chapters from the Blue Book<br><br>Built for ABE Board Prep</p></div>';
-  html += '</div>';
+  const email = authUser ? authUser.email : '';
+  const initials = email ? email[0].toUpperCase() : '?';
+  let html = '<div class="page-inner">'
+    + '<div class="header"><h1>Settings</h1><div class="subtitle">Account &amp; Preferences</div></div>'
+    + '<div class="card"><div class="card-title">Account</div>'
+    + '<div class="user-badge">'
+    + '<div class="user-badge-avatar">' + escHtml(initials) + '</div>'
+    + '<div class="user-badge-info"><div class="user-badge-email">' + escHtml(email) + '</div>'
+    + '<div class="user-badge-status">&#x25CF; Synced to cloud</div></div>'
+    + '<span class="sync-status synced" style="font-size:11px;margin-left:auto">&#x25CF; Synced</span>'
+    + '</div>'
+    + '<button onclick="signOut()" style="display:block;width:100%;padding:12px;border-radius:8px;border:2px solid var(--danger);background:none;color:var(--danger);font-weight:600;cursor:pointer;font-family:inherit">Sign Out</button>'
+    + '</div>'
+    + '<div class="card"><div class="card-title">Data Management</div>'
+    + '<button onclick="exportProgress()" style="display:block;width:100%;padding:12px;margin-bottom:8px;border-radius:8px;border:2px solid var(--primary);background:none;color:var(--primary);font-weight:600;cursor:pointer;font-family:inherit">Export Progress (JSON)</button>'
+    + '<label style="display:block;width:100%;padding:12px;margin-bottom:8px;border-radius:8px;border:2px solid var(--success);background:none;color:var(--success);font-weight:600;cursor:pointer;text-align:center;font-family:inherit">Import Progress<input type="file" accept=".json" onchange="importProgress(event)" style="display:none"></label>'
+    + '<button onclick="if(confirm(\'Reset ALL progress? This cannot be undone.\')){progress=getDefaultProgress();saveProgress();render()}" style="display:block;width:100%;padding:12px;border-radius:8px;border:2px solid var(--danger);background:none;color:var(--danger);font-weight:600;cursor:pointer;font-family:inherit">Reset All Progress</button>'
+    + '</div>'
+    + '<div class="card"><div class="card-title">About</div>'
+    + '<p style="font-size:13px;color:var(--text-secondary);line-height:1.7">EndoBoard v1.0<br>' + QUESTIONS.length + ' MCQs &middot; ' + FLASHCARDS.length + ' Flashcards<br>13 Chapters from the Blue Book<br><br>Built for ABE Board Prep</p>'
+    + '</div>'
+    + '</div>';
   html += renderBottomNav('settings');
   app.innerHTML = html;
 }
@@ -1131,20 +1391,8 @@ function renderBottomNav(active) {
 
   return sidebar + bottomNav;
 }
-function generateCode() {
-  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  let code = 'ENDO-';
-  for (let i = 0; i < 4; i++) code += chars[Math.floor(Math.random()*chars.length)];
-  document.getElementById('sync-code').value = code;
-}
-function saveStudyCode() {
-  const code = document.getElementById('sync-code').value.trim();
-  if (code) {
-    connectStudyCode(code);
-    alert('Study code saved and syncing! Use this same code on your other devices: ' + code);
-    render();
-  }
-}
+
+
 function exportProgress() {
   const data = JSON.stringify(progress, null, 2);
   const blob = new Blob([data], {type: 'application/json'});
@@ -1173,8 +1421,8 @@ function importProgress(event) {
   reader.readAsText(file);
 }
 loadProgress();
+render(); // show loading screen
 initFirebase();
-render();
 </script>
 </body>
 </html>
