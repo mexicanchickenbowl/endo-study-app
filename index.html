@@ -639,6 +639,34 @@ body {
 .user-badge-info { flex: 1; }
 .user-badge-email { font-size: 13px; font-weight: 600; color: var(--text); }
 .user-badge-status { font-size: 11px; color: var(--success); font-weight: 500; }
+.flag-btn {
+  background: none; border: none; cursor: pointer;
+  font-size: 20px; padding: 6px 10px; border-radius: 8px;
+  transition: var(--transition); line-height: 1;
+  color: var(--text-secondary);
+}
+.flag-btn:hover { background: var(--warning-bg); }
+.flag-btn.flagged { color: var(--warning); }
+.quiz-actions {
+  display: flex; align-items: center; gap: 8px;
+  margin: 0 16px 0;
+}
+@media (min-width: 900px) { .quiz-actions { margin: 0; } }
+.kbd-hint {
+  font-size: 11px; color: var(--text-secondary);
+  text-align: center; margin: 6px 0 0;
+  font-weight: 500; letter-spacing: .3px;
+}
+.option-num {
+  font-weight: 700; color: var(--primary);
+  width: 26px; height: 26px; border-radius: 8px;
+  background: var(--primary-glow);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 13px; flex-shrink: 0; margin-top: 1px;
+  font-variant-numeric: tabular-nums;
+}
+.option-btn.correct   .option-num { background: var(--success-bg); color: var(--success); }
+.option-btn.incorrect .option-num { background: var(--danger-bg);  color: var(--danger); }
 .spinner {
   width: 40px; height: 40px;
   border: 4px solid var(--border); border-top-color: var(--primary);
@@ -701,6 +729,7 @@ function getDefaultProgress() {
     questionHistory: {},
     sessionHistory: [],
     flashcardHistory: {},
+    flagged: {},
     totalQuestions: 0,
     totalCorrect: 0,
   };
@@ -884,6 +913,12 @@ function mergeRemoteProgress(remote) {
     progress.lastStudyDate = remote.lastStudyDate;
     changed = true;
   }
+  if (remote.flagged) {
+    if (!progress.flagged) progress.flagged = {};
+    Object.keys(remote.flagged).forEach(qid => {
+      if (!progress.flagged[qid]) { progress.flagged[qid] = remote.flagged[qid]; changed = true; }
+    });
+  }
   if (changed) {
     saveProgressLocal();
     render();
@@ -997,6 +1032,10 @@ function startQuiz(mode, chapters) {
     const pool = QUESTIONS.filter(q => chapterNums.includes(q.chapter));
     shuffleArray(pool);
     questions = pool.slice(0, 10);
+  } else if (mode === 'flagged') {
+    const flaggedIds = Object.keys(progress.flagged || {});
+    questions = QUESTIONS.filter(q => flaggedIds.includes(String(q.id)) && chapterNums.includes(q.chapter));
+    shuffleArray(questions);
   }
   state.quizMode = mode;
   state.quizQuestions = questions;
@@ -1196,6 +1235,7 @@ function showAuthError(msg) {
 function renderDashboard(app) {
   const readiness = getBoardReadiness();
   const weak = getWeakQuestions().length;
+  const flaggedCount = Object.keys(progress.flagged || {}).length;
   const totalAttempted = Object.keys(progress.questionHistory).length;
   let html = '<div class="page-inner"><div class="header"><h1>EndoBoard</h1><div class="subtitle">ABE Board Review</div>' + (authUser ? '<div class="sync-status synced" style="font-size:11px;margin-top:4px">&#x25CF; Synced &middot; ' + escHtml(authUser.email) + '</div>' : '') + '</div>';
   if (progress.streak > 0) {
@@ -1206,7 +1246,7 @@ function renderDashboard(app) {
   const readColor = readiness >= 70 ? 'var(--success)' : readiness >= 40 ? 'var(--warning)' : 'var(--danger)';
   html += '<div class="card text-center"><div class="readiness-ring"><svg width="120" height="120"><circle cx="60" cy="60" r="45" fill="none" stroke="var(--border)" stroke-width="8"/><circle cx="60" cy="60" r="45" fill="none" stroke="'+readColor+'" stroke-width="8" stroke-dasharray="'+circ+'" stroke-dashoffset="'+offset+'" stroke-linecap="round"/></svg><div class="score">'+readiness+'</div></div><div class="readiness-label">Board Readiness Score</div></div>';
   html += '<div class="stats-row"><div class="stat-card"><div class="stat-value">'+progress.xp+'</div><div class="stat-label">XP</div></div><div class="stat-card"><div class="stat-value">'+totalAttempted+'/'+QUESTIONS.length+'</div><div class="stat-label">Questions</div></div><div class="stat-card"><div class="stat-value">'+(progress.totalQuestions > 0 ? Math.round(progress.totalCorrect/progress.totalQuestions*100) : 0)+'%</div><div class="stat-label">Accuracy</div></div></div>';
-  html += '<div class="card"><div class="card-title">Quick Start</div><div class="mode-grid"><div class="mode-btn" onclick="state.quizMode=\'quick10\';state.screen=\'chapterSelect\';render()"><div class="mode-icon">&#x26A1;</div><div class="mode-name">Quick 10</div><div class="mode-desc">5 min sprint</div></div><div class="mode-btn" onclick="state.quizMode=\'weak\';startQuiz(\'weak\',[])"><div class="mode-icon">&#x1F3AF;</div><div class="mode-name">Weak Areas</div><div class="mode-desc">'+weak+' questions</div></div><div class="mode-btn" onclick="state.quizMode=\'study\';state.screen=\'chapterSelect\';render()"><div class="mode-icon">&#x1F4DA;</div><div class="mode-name">Study</div><div class="mode-desc">By chapter</div></div><div class="mode-btn" onclick="state.quizMode=\'exam\';state.screen=\'chapterSelect\';render()"><div class="mode-icon">&#x1F3C6;</div><div class="mode-name">Exam Sim</div><div class="mode-desc">50 Q, timed</div></div></div><div style="margin-top:12px"><div class="mode-btn" style="display:block;width:100%" onclick="state.screen=\'chapterSelect\';state.quizMode=\'flashcards\';render()"><div class="mode-icon">&#x1F4A1;</div><div class="mode-name">High-Yield Flashcards</div><div class="mode-desc">'+FLASHCARDS.length+' key facts</div></div></div></div>';
+  html += '<div class="card"><div class="card-title">Quick Start</div><div class="mode-grid"><div class="mode-btn" onclick="state.quizMode=\'quick10\';state.screen=\'chapterSelect\';render()"><div class="mode-icon">&#x26A1;</div><div class="mode-name">Quick 10</div><div class="mode-desc">5 min sprint</div></div><div class="mode-btn" onclick="state.quizMode=\'weak\';startQuiz(\'weak\',[])"><div class="mode-icon">&#x1F3AF;</div><div class="mode-name">Weak Areas</div><div class="mode-desc">'+weak+' questions</div></div>'+'<div class="mode-btn" onclick="startQuiz(\'flagged\',[])"><div class="mode-icon">&#x1F6A9;</div><div class="mode-name">Flagged</div><div class="mode-desc">'+flaggedCount+' flagged</div></div><div class="mode-btn" onclick="state.quizMode=\'study\';state.screen=\'chapterSelect\';render()"><div class="mode-icon">&#x1F4DA;</div><div class="mode-name">Study</div><div class="mode-desc">By chapter</div></div><div class="mode-btn" onclick="state.quizMode=\'exam\';state.screen=\'chapterSelect\';render()"><div class="mode-icon">&#x1F3C6;</div><div class="mode-name">Exam Sim</div><div class="mode-desc">50 Q, timed</div></div></div><div style="margin-top:12px"><div class="mode-btn" style="display:block;width:100%" onclick="state.screen=\'chapterSelect\';state.quizMode=\'flashcards\';render()"><div class="mode-icon">&#x1F4A1;</div><div class="mode-name">High-Yield Flashcards</div><div class="mode-desc">'+FLASHCARDS.length+' key facts</div></div></div></div>';
   html += '<div class="card"><div class="card-title">Chapters</div><div class="chapters-grid">';
   CHAPTERS.forEach(ch => {
     const s = getChapterStats(ch.num);
@@ -1249,28 +1289,92 @@ function renderQuizQuestion() {
   if (!area) { render(); return; }
   const q = state.quizQuestions[state.currentIndex];
   const chTitle = CHAPTERS.find(c => c.num === q.chapter)?.short || '';
-  let html = '<div class="question-card"><div class="q-number">Ch'+q.chapter+' &middot; '+escHtml(chTitle)+' &middot; Q'+q.number+'</div><div class="q-text">'+escHtml(q.question)+'</div>';
-  q.options.forEach(opt => {
+  const isFlagged = !!(progress.flagged && progress.flagged[q.id]);
+  const correctAnswer = q.answer || q.correctAnswer;
+
+  let html = '<div class="question-card">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">'
+    + '<div class="q-number">Ch'+q.chapter+' \u00b7 '+escHtml(chTitle)+' \u00b7 Q'+q.number+'</div>'
+    + '<button class="flag-btn '+(isFlagged?'flagged':'')+'" onclick="toggleFlag(\''+q.id+'\')" title="Flag for review">'+(isFlagged?'\u{1F6A9}':'\u{1F3F3}&#xFE0F;')+'</button>'
+    + '</div>'
+    + '<div class="q-text">'+escHtml(q.question)+'</div>';
+
+  q.options.forEach((opt, i) => {
+    const num = i + 1;
     let cls = 'option-btn';
     if (state.answered) {
-      if (opt.letter === (q.answer || q.correctAnswer)) cls += ' correct show-correct';
-      else if (opt.letter === state.selectedAnswer && opt.letter !== (q.answer || q.correctAnswer)) cls += ' incorrect';
+      if (opt.letter === correctAnswer) cls += ' correct show-correct';
+      else if (opt.letter === state.selectedAnswer && opt.letter !== correctAnswer) cls += ' incorrect';
     } else if (state.selectedAnswer === opt.letter) {
       cls += ' selected';
     }
-    html += '<button class="'+cls+'" onclick="selectAnswer(\''+opt.letter+'\')"><span class="option-letter">'+opt.letter+'.</span> '+escHtml(opt.text)+'</button>';
+    html += '<button class="'+cls+'" onclick="selectAnswer(\''+opt.letter+'\')" '+(state.answered?'disabled':'')+' data-key="'+num+'">'
+      + '<span class="option-num">'+num+'</span> '+escHtml(opt.text)+'</button>';
   });
-  html += '<div class="explanation-box '+(state.answered ? 'show' : '')+'"><strong>'+(state.selectedAnswer === (q.answer || q.correctAnswer) ? '&#x2705; Correct!' : '&#x274C; Incorrect')+'</strong><br>'+escHtml(q.explanation)+'</div></div>';
+
+  if (state.answered) {
+    const isCorrect = state.selectedAnswer === correctAnswer;
+    html += '<div class="explanation-box show"><strong>'
+      + (isCorrect ? '\u2705 Correct!' : '\u274C Incorrect \u2014 Answer: '+correctAnswer)
+      + '</strong><br>'+escHtml(q.explanation||'')+'</div>';
+  } else {
+    html += '<div class="explanation-box"></div>';
+    html += '<div class="kbd-hint">Press 1 \u00b7 2 \u00b7 3 \u00b7 4 to answer &nbsp;\u2502&nbsp; F to flag</div>';
+  }
+  html += '</div>';
+
   if (state.answered) {
     const isLast = state.currentIndex >= state.quizQuestions.length - 1;
-    html += '<button class="next-btn" onclick="nextQuestion()">'+(isLast ? 'See Results' : 'Next Question')+'</button>';
+    html += '<button class="next-btn" id="next-btn" onclick="nextQuestion()">'+(isLast ? 'See Results \u279C' : 'Next Question \u279C')+'</button>';
+    html += '<div class="kbd-hint" style="margin-bottom:12px">Space or Enter for next &nbsp;\u2502&nbsp; F to flag</div>';
   }
+
   area.innerHTML = html;
+
   // Update progress bar
   const fillEl = document.getElementById('quiz-progress-fill');
   if (fillEl) {
     const pct = Math.round(((state.currentIndex + (state.answered ? 1 : 0)) / state.quizQuestions.length) * 100);
     fillEl.style.width = pct + '%';
+  }
+
+  setupQuizKeyboard();
+}
+
+function setupQuizKeyboard() {
+  if (window._quizKeyHandler) document.removeEventListener('keydown', window._quizKeyHandler);
+  window._quizKeyHandler = function(e) {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+    if (state.screen !== 'quiz') {
+      document.removeEventListener('keydown', window._quizKeyHandler);
+      return;
+    }
+    const q = state.quizQuestions[state.currentIndex];
+    if (!q) return;
+    if (!state.answered) {
+      if (['1','2','3','4'].includes(e.key)) {
+        const idx = parseInt(e.key) - 1;
+        if (q.options[idx]) selectAnswer(q.options[idx].letter);
+      }
+    } else {
+      if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); nextQuestion(); }
+    }
+    if (e.key === 'f' || e.key === 'F') toggleFlag(q.id);
+  };
+  document.addEventListener('keydown', window._quizKeyHandler);
+}
+
+function toggleFlag(qid) {
+  if (!progress.flagged) progress.flagged = {};
+  if (progress.flagged[qid]) delete progress.flagged[qid];
+  else progress.flagged[qid] = Date.now();
+  saveProgress();
+  const btn = document.querySelector('.flag-btn');
+  if (btn) {
+    const flagged = !!progress.flagged[qid];
+    btn.className = 'flag-btn' + (flagged ? ' flagged' : '');
+    btn.innerHTML = flagged ? '\u{1F6A9}' : '\u{1F3F3}\uFE0F';
+    btn.title = flagged ? 'Flagged for review' : 'Flag for review';
   }
 }
 function renderResults(app) {
