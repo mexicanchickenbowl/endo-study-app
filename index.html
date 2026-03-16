@@ -779,7 +779,7 @@ let authUser = null;
 function initFirebase() {
   const config = window.FIREBASE_CONFIG;
   if (!config || typeof firebase === 'undefined') {
-    state.screen = 'login';
+    state.screen = 'dashboard';
     render();
     return;
   }
@@ -796,15 +796,19 @@ function initFirebase() {
           render();
         });
       } else {
-        authUser = null;
-        firebaseReady = false;
-        state.screen = 'login';
-        render();
+        // Auto-login with hardcoded credentials
+        firebase.auth().signInWithEmailAndPassword('Nvbrooks18@gmail.com', 'endostudyappftgordon')
+          .catch(err => {
+            console.error('Auto-login failed:', err);
+            // Fallback to offline mode with local storage only
+            state.screen = 'dashboard';
+            render();
+          });
       }
     });
   } catch(e) {
     console.error('Firebase init error:', e);
-    state.screen = 'login';
+    state.screen = 'dashboard';
     render();
   }
 }
@@ -1452,7 +1456,6 @@ function renderSettings(app) {
     + '<div class="user-badge-status">&#x25CF; Synced to cloud</div></div>'
     + '<span class="sync-status synced" style="font-size:11px;margin-left:auto">&#x25CF; Synced</span>'
     + '</div>'
-    + '<button onclick="signOut()" style="display:block;width:100%;padding:12px;border-radius:8px;border:2px solid var(--danger);background:none;color:var(--danger);font-weight:600;cursor:pointer;font-family:inherit">Sign Out</button>'
     + '</div>'
     + '<div class="card"><div class="card-title">Data Management</div>'
     + '<button onclick="exportProgress()" style="display:block;width:100%;padding:12px;margin-bottom:8px;border-radius:8px;border:2px solid var(--primary);background:none;color:var(--primary);font-weight:600;cursor:pointer;font-family:inherit">Export Progress (JSON)</button>'
