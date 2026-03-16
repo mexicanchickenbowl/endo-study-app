@@ -8,6 +8,7 @@
 <meta name="theme-color" content="#667eea">
 <title>EndoBoard - Board Review</title>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 <script>
 window.FIREBASE_CONFIG = {
@@ -376,6 +377,7 @@ function recordStudyToday() {
 }
 let firebaseReady = false;
 let db = null;
+let authUser = null;
 function initFirebase() {
   const config = window.FIREBASE_CONFIG;
   if (!config) return;
@@ -383,15 +385,24 @@ function initFirebase() {
     if (typeof firebase !== 'undefined') {
       firebase.initializeApp(config);
       db = firebase.database();
-      firebaseReady = true;
-      console.log('Firebase connected');
-      if (progress.studyCode) {
-        pullFromFirebase();
-        db.ref('users/' + progress.studyCode).on('value', snap => {
-          if (snap.val()) mergeRemoteProgress(snap.val());
+      // Sign in anonymously for security
+      firebase.auth().signInAnonymously()
+        .then((cred) => {
+          authUser = cred.user;
+          firebaseReady = true;
+          console.log('Firebase connected & authenticated (uid: ' + authUser.uid + ')');
+          if (progress.studyCode) {
+            pullFromFirebase();
+            db.ref('users/' + progress.studyCode).on('value', snap => {
+              if (snap.val()) mergeRemoteProgress(snap.val());
+            });
+          }
+          updateSyncStatus('synced');
+        })
+        .catch((e) => {
+          console.log('Firebase auth error:', e);
+          updateSyncStatus('offline');
         });
-      }
-      updateSyncStatus('synced');
     }
   } catch(e) { console.log('Firebase init error:', e); updateSyncStatus('offline'); }
 }
