@@ -25,7 +25,7 @@
 // scripts/curate_cli.mjs before citations render in the app.
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import Anthropic from '@anthropic-ai/sdk';
+import { spawn } from 'node:child_process';
 
 const INPUT  = 'questions.merged.json';
 const OUTPUT = 'questions.enriched.json';
@@ -45,38 +45,81 @@ if (!process.env.ANTHROPIC_API_KEY) {
   console.error('ANTHROPIC_API_KEY not set');
   process.exit(1);
 }
-const client = new Anthropic();
 
-const SYSTEM = `You are an endodontics literature expert. For each exam question, identify the single most relevant primary-literature citation (typically from Journal of Endodontics, International Endodontic Journal, Oral Surg Oral Med, Dental Traumatology, etc.).
+// Thin HTTP client around `curl` — bypasses Node's undici which hangs on
+// HTTP/2 against api.anthropic.com in the sandbox we develop in. curl runs
+// everywhere and respects http_proxy/https_proxy if set. If you want to
+// use the official SDK instead, just replace `callAnthropic` below.
+function callAnthropic({ model, system, messages, max_tokens, temperature }) {
+  const payload = JSON.stringify({ model, max_tokens, temperature, system, messages });
+  return new Promise((resolve, reject) => {
+    const proc = spawn('curl', [
+      '-s', '--fail-with-body', '--max-time', '120',
+      'https://api.anthropic.com/v1/messages',
+      '-H', 'x-api-key: ' + process.env.ANTHROPIC_API_KEY,
+      '-H', 'anthropic-version: 2023-06-01',
+      '-H', 'content-type: application/json',
+      '--data-binary', '@-',
+    ], { stdio: ['pipe', 'pipe', 'pipe'] });
+    let out = '', err = '';
+    proc.stdout.on('data', d => out += d);
+    proc.stderr.on('data', d => err += d);
+    proc.on('error', reject);
+    proc.on('close', code => {
+      if (code !== 0) return reject(new Error('curl exit ' + code + ': ' + (err || out).slice(0, 500)));
+      try {
+        const j = JSON.parse(out);
+        if (j.type === 'error') return reject(new Error('anthropic: ' + JSON.stringify(j.error)));
+        resolve(j);
+      } catch (e) { reject(new Error('parse: ' + e.message + ' / ' + out.slice(0, 200))); }
+    });
+    proc.stdin.write(payload);
+    proc.stdin.end();
+  });
+}
 
-Rules:
-- If the explanation already names an author (e.g. "Sjögren et al"), anchor the citation to that author/study. Do NOT invent a different one.
-- Classify "classic": seminal, widely-cited, still practice-defining (e.g. Sjögren 1990 on outcomes, Torabinejad on MTA, Ørstavik on healing).
-- Classify "historic": older (>30 yrs), mostly superseded, but still appears in board reading lists (e.g. Kakehashi 1965, Möller 1981).
-- Return strict JSON. Do NOT include prose outside the JSON.
-- If you cannot identify a specific study with reasonable confidence, set pmid=null and leave fields you are unsure about as empty strings. NEVER fabricate a PMID. A human reviewer will verify every entry.
-- Prefer the most cited / highest-impact study when multiple support the answer.
-- "relevance" is one sentence explaining how this study supports the answer (the examiner wants to hear you cite this).`;
+const SYSTEM = `You are an endodontics literature expert helping a dental resident prepare cite-the-study cards for ABE board prep. Accuracy matters far more than completeness — a wrong citation is worse than no citation, because the candidate may recite it on an oral exam.
+
+STRICT RULES — read carefully:
+
+1. ANCHOR to the author in the explanation. If the explanation says "Sjögren et al", your author field MUST be "Sjögren". If the explanation names no author, only cite if you are virtually certain which study the question is testing.
+
+2. NEVER FABRICATE. If you are not confident in a field, leave it empty or null:
+   - Don't guess coauthors. If you are unsure of the second/third authors, leave coauthors as an empty string "".
+   - Don't guess years. If unsure, set year to null.
+   - Don't guess volume, pages, or PMIDs — these are the most frequently wrong. Leave as "" or null when uncertain.
+   - It is far better to return {"author":"Delivanis","coauthors":"","year":null,"title":"","journal":"J Endod","volume":"","pages":"","pmid":null,"classification":"historic","relevance":"..."} than to invent details.
+
+3. CONFIDENCE FIELD. Add a "confidence" field to each citation: one of "high" (you are virtually certain author + title + approximate year are correct), "medium" (author matches but other fields are your best guess), "low" (you are guessing even the author — rare; should correspond mostly to your best judgment about the topic area).
+
+4. CLASSIFICATION:
+   - "classic": seminal, widely-cited, still practice-defining (e.g. Sjögren 1990, Torabinejad on MTA, Ørstavik on healing, Siqueira on microbiology).
+   - "historic": >30 years old, often superseded but still on board reading lists (Kakehashi 1965, Möller 1981, Delivanis et al on bacteremia).
+
+5. OUTPUT. Return ONLY strict JSON matching the schema described by the user. No prose. No markdown fences.
+
+6. RELEVANCE. One sentence explaining how this study's finding supports the answer. Written so a resident could verbalize it on the oral boards.`;
 
 const USER_TEMPLATE = (items) => `Here are ${items.length} endo board questions. For EACH, return a JSON object with this exact shape:
 
 {
   "id": "<echo the question id>",
   "citation": {
-    "author": "<first author surname>",
-    "coauthors": "<comma-separated other authors, or empty>",
-    "year": <integer or null>,
-    "title": "<full paper title>",
-    "journal": "<journal abbreviation, e.g. J Endod>",
+    "author": "<first author surname — MATCH the explanation exactly if it names one>",
+    "coauthors": "<comma-separated other authors — empty string if unsure>",
+    "year": <integer or null — null if unsure>,
+    "title": "<full paper title — empty string if unsure>",
+    "journal": "<journal abbreviation, e.g. J Endod — empty string if unsure>",
     "volume": "<string or empty>",
     "pages": "<start-end or empty>",
-    "pmid": "<numeric string or null>",
+    "pmid": "<numeric string or null — ONLY if you are highly confident>",
     "classification": "classic" | "historic",
-    "relevance": "<one sentence explaining why this study supports the answer>"
+    "confidence": "high" | "medium" | "low",
+    "relevance": "<one sentence explaining how this study's finding supports the answer>"
   }
 }
 
-Return ALL ${items.length} objects as a single JSON array, no prose, no markdown fences.
+Remember: a WRONG detail is worse than a MISSING detail. Leave fields empty/null when unsure. Return ALL ${items.length} objects as a single JSON array, no prose, no markdown fences.
 
 QUESTIONS:
 ${items.map(q => JSON.stringify({
@@ -92,14 +135,17 @@ function isPriority(q) {
 }
 
 async function enrichBatch(batch) {
-  const resp = await client.messages.create({
+  console.log('    calling ' + MODEL + ' with ' + batch.length + ' q\'s...');
+  const t0 = Date.now();
+  const resp = await callAnthropic({
     model: MODEL,
     max_tokens: 4096,
     temperature: 0.2,
     system: SYSTEM,
     messages: [{ role: 'user', content: USER_TEMPLATE(batch) }],
   });
-  const text = resp.content.map(c => c.type === 'text' ? c.text : '').join('');
+  console.log('    api ok in ' + ((Date.now() - t0) / 1000).toFixed(1) + 's');
+  const text = (resp.content || []).map(c => c.type === 'text' ? c.text : '').join('');
   // Strip any accidental code-fence
   const cleaned = text.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```\s*$/i, '').trim();
   let parsed;
@@ -112,13 +158,20 @@ async function enrichBatch(batch) {
   return Array.isArray(parsed) ? parsed : [parsed];
 }
 
-// Validate PMIDs via PubMed HEAD request. Blanks any 404 and forces verified:false.
+// Validate PMIDs via PubMed HEAD request with a hard timeout so a slow or
+// unreachable endpoint can't hang the whole pipeline. Off by default —
+// enable with `VALIDATE_PMID=1 node ...`. When disabled, returned PMIDs
+// are passed through unvalidated (still gated on `verified:false` until a
+// human reviews).
+const VALIDATE_PMID = process.env.VALIDATE_PMID === '1';
 async function validatePmid(pmid) {
   if (!pmid) return false;
+  if (!VALIDATE_PMID) return true; // trust; human review gate still applies
   try {
     const r = await fetch('https://pubmed.ncbi.nlm.nih.gov/' + encodeURIComponent(pmid) + '/', {
       method: 'HEAD',
       redirect: 'follow',
+      signal: AbortSignal.timeout(5000),
     });
     return r.ok;
   } catch (e) {
