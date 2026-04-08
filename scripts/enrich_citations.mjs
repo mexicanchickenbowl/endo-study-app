@@ -29,7 +29,11 @@ import Anthropic from '@anthropic-ai/sdk';
 
 const INPUT  = 'questions.merged.json';
 const OUTPUT = 'questions.enriched.json';
-const MODEL  = 'claude-opus-4-6';
+// Sonnet 4.6 is the right tool for this task: structured citation lookup
+// with explanations that already name the author ~20% of the time. Opus
+// would be ~5x more expensive with no meaningful quality gain here.
+// Override via MODEL env var if you want: `MODEL=claude-opus-4-6 ...`
+const MODEL  = process.env.MODEL || 'claude-sonnet-4-6';
 const BATCH  = 10;
 
 const args = process.argv.slice(2);
