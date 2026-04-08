@@ -1166,8 +1166,17 @@ function flashcardResponse(knew) {
 // oral boards: from a clinical cue, name the study. It reuses the existing
 // citation data and feeds grades back into the same SM-2 scheduler as MCQ
 // mode, so your Review Due queue stays coherent across modes.
+function authorInStem(q) {
+  if (!q.citation?.author || !q.question) return false;
+  const author = q.citation.author.toLowerCase().replace(/[^\w\s]/g, '');
+  const stem = q.question.toLowerCase().replace(/[^\w\s]/g, '');
+  return stem.includes(author);
+}
 function getPaperDrillPool() {
-  return QUESTIONS.filter(q => q.citation && q.citation.verified);
+  // Filter out questions where the author is already visible in the stem.
+  // "According to Sjögren et al, what is..." makes the drill trivial.
+  // Only ~33% of questions have hidden authors; we drill only those.
+  return QUESTIONS.filter(q => q.citation && q.citation.verified && !authorInStem(q));
 }
 function startPaperDrill(chapters) {
   const userPickedChapters = !!(chapters && chapters.length > 0);
