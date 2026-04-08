@@ -234,6 +234,68 @@ api.startQuiz('quick10', []);
 const q10State = vm.runInContext('state', ctx);
 assert('Quick 10 gets 10 questions', q10State.quizQuestions.length === 10);
 
+// --- Name the Paper drill ------------------------------------------------
+// Seed verified citations on a subset of the blueprint pool — each from a
+// DIFFERENT author so the per-session dedupe doesn't collapse them all.
+vm.runInContext(`
+  for (let i = 0; i < QUESTIONS.length; i++) {
+    if (i % 3 === 0) {
+      QUESTIONS[i].citation = {
+        author: 'Author' + i,
+        year: 1990 + (i % 30),
+        title: 'Paper ' + i,
+        journal: 'J Endod',
+        classification: 'classic',
+        verified: true,
+      };
+    }
+  }
+`, ctx);
+
+const startPaperDrill = vm.runInContext('startPaperDrill', ctx);
+const gradePaperDrillAuto = vm.runInContext('gradePaperDrillAuto', ctx);
+const submitPaperDrillAnswer = vm.runInContext('submitPaperDrillAnswer', ctx);
+const recordPaperDrillGrade = vm.runInContext('recordPaperDrillGrade', ctx);
+const getPaperDrillPool = vm.runInContext('getPaperDrillPool', ctx);
+
+assert('paper drill pool only verified', getPaperDrillPool().every(q => q.citation && q.citation.verified));
+assert('paper drill pool non-empty', getPaperDrillPool().length > 0);
+
+// Auto-grading
+assert('exact author match is correct', gradePaperDrillAuto('Sjogren', {author:'Sjögren'}) === 'correct');
+assert('forgiving accent match', gradePaperDrillAuto('sjogren', {author:'Sjögren'}) === 'correct');
+assert('prefix match is correct', gradePaperDrillAuto('Torabinejad', {author:'Torabinejad M'}) === 'correct');
+assert('coauthor match is partial', gradePaperDrillAuto('Hagglund', {author:'Sjögren', coauthors:'Hägglund, Sundqvist, Wing'}) === 'partial');
+assert('unrelated guess is wrong', gradePaperDrillAuto('Friedman', {author:'Sjögren'}) === 'wrong');
+assert('empty guess is wrong', gradePaperDrillAuto('', {author:'Sjögren'}) === 'wrong');
+
+// End-to-end flow: start drill, reveal, self-grade, advance.
+startPaperDrill([]);
+const pd1 = vm.runInContext('state', ctx);
+assert('startPaperDrill sets screen', pd1.screen === 'paperDrill');
+assert('paper drill queue capped at 10', pd1.paperDrillQueue.length > 0 && pd1.paperDrillQueue.length <= 10);
+
+// Submit a guess and advance. Mock `document.getElementById` so submit can
+// read the typed value (we stub the whole DOM so just set state directly).
+vm.runInContext('state.paperDrillTyped = "wrong guess"', ctx);
+submitPaperDrillAnswer();
+const pd2 = vm.runInContext('state', ctx);
+assert('submit reveals citation', pd2.paperDrillRevealed === true);
+assert('auto-grade populated', pd2.paperDrillAutoGrade !== null);
+
+// Self-grade as "got" — should advance index and reset revealed flag.
+const beforeIdx = pd2.paperDrillIndex;
+const beforeH = vm.runInContext('progress.questionHistory', ctx);
+const cardId = pd2.paperDrillQueue[beforeIdx].id;
+const hBefore = beforeH[cardId] ? {...beforeH[cardId]} : null;
+recordPaperDrillGrade('got');
+const pd3 = vm.runInContext('state', ctx);
+const progressNow2 = vm.runInContext('progress', ctx);
+assert('self-grade advances index OR finishes', pd3.paperDrillIndex === beforeIdx + 1 || pd3.screen === 'results');
+const hAfter = progressNow2.questionHistory[cardId];
+assert('paper drill feeds SM-2 scheduler', hAfter && hAfter.lastGrade === 4);
+assert('paper drill writes questionHistory.attempts', hAfter && hAfter.attempts > (hBefore ? hBefore.attempts : 0));
+
 console.log('');
 if (failed === 0) { console.log('All smoke tests passed.'); process.exit(0); }
 else { console.log(failed + ' smoke test(s) FAILED.'); process.exit(1); }

@@ -147,6 +147,18 @@ async function shoot(page, name) {
     await page.waitForTimeout(200);
     await shoot(page, '06-stats-blueprint-desktop');
 
+    // Name the Paper drill — question prompt (unrevealed)
+    await page.evaluate(() => { startPaperDrill([]); });
+    await page.waitForTimeout(200);
+    // Type into the real input so submitPaperDrillAnswer reads a value.
+    await page.fill('#paper-drill-input', 'Sjögren');
+    await shoot(page, '08-name-the-paper-prompt-desktop');
+
+    // Name the Paper drill — revealed with citation + correct match
+    await page.evaluate(() => { submitPaperDrillAnswer(); });
+    await page.waitForTimeout(200);
+    await shoot(page, '09-name-the-paper-revealed-desktop');
+
     await ctx.close();
   }
 

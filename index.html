@@ -430,6 +430,9 @@ body {
 .mode-btn-primary { border-color: var(--primary); background: linear-gradient(135deg, var(--primary), var(--primary-dark)); color: #fff; }
 .mode-btn-primary .mode-desc { color: rgba(255,255,255,.85); }
 .mode-btn-primary:hover { box-shadow: 0 8px 24px var(--primary-glow); }
+.mode-btn-accent { border-color: var(--success); background: linear-gradient(135deg, var(--success), #16a34a); color: #fff; }
+.mode-btn-accent .mode-desc { color: rgba(255,255,255,.85); }
+.mode-btn-accent:hover { box-shadow: 0 8px 24px rgba(34,197,94,.25); }
 
 /* ── Citation pill (shown under explanations) ── */
 .citation {
@@ -444,6 +447,76 @@ body {
 .citation-classic  .cite-tag { background: var(--success-bg); color: var(--success); }
 .citation-historic .cite-tag { background: var(--warning-bg); color: var(--warning); }
 .citation .cite-relevance { display: block; margin-top: 6px; color: var(--text-secondary); font-style: italic; font-size: 12px; }
+
+/* ── Name the Paper drill ── */
+.paper-drill-card {
+  background: var(--card); border-radius: var(--radius); padding: 24px 20px;
+  margin: 16px; box-shadow: var(--shadow);
+}
+@media (min-width: 900px) {
+  .paper-drill-card { margin: 16px 0; padding: 32px 28px; }
+}
+.paper-drill-cue-label,
+.paper-drill-answer-label,
+.paper-drill-self-grade-label {
+  font-size: 11px; font-weight: 700; letter-spacing: .6px;
+  text-transform: uppercase; color: var(--primary-dark);
+  margin-bottom: 6px;
+}
+.paper-drill-stem {
+  font-size: 16px; line-height: 1.55; margin-bottom: 18px;
+  padding: 14px 16px; background: var(--bg); border-radius: var(--radius-sm);
+  border-left: 3px solid var(--primary);
+}
+.paper-drill-answer {
+  font-size: 15px; font-weight: 600; margin-bottom: 22px;
+  padding: 12px 16px; background: var(--success-bg);
+  border-radius: var(--radius-sm); color: var(--success);
+  border-left: 3px solid var(--success);
+}
+.paper-drill-prompt {
+  font-size: 15px; font-weight: 600; margin-top: 8px; margin-bottom: 10px;
+}
+.paper-drill-input {
+  width: 100%; padding: 14px 16px; font-size: 16px;
+  border: 2px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg); color: var(--text);
+  font-family: inherit; outline: none;
+  transition: var(--transition);
+}
+.paper-drill-input:focus { border-color: var(--primary); box-shadow: 0 0 0 4px var(--primary-glow); }
+.paper-drill-result {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap;
+  padding: 12px 14px; background: var(--bg);
+  border-radius: var(--radius-sm); margin-bottom: 14px;
+}
+.paper-drill-typed { font-size: 13px; color: var(--text-secondary); }
+.paper-drill-typed em { color: var(--text); font-weight: 600; font-style: normal; }
+.paper-drill-typed.paper-drill-skip { font-style: italic; }
+.paper-drill-autograde {
+  font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 999px;
+}
+.paper-drill-ag-correct { background: var(--success-bg); color: var(--success); }
+.paper-drill-ag-partial { background: var(--warning-bg); color: var(--warning); }
+.paper-drill-ag-wrong   { background: var(--danger-bg);  color: var(--danger); }
+.paper-drill-grade-row {
+  display: grid; grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px; margin-top: 8px;
+}
+.grade-btn {
+  padding: 14px 8px; border: 2px solid var(--border);
+  border-radius: var(--radius-sm); background: var(--card);
+  font-family: inherit; font-size: 14px; font-weight: 700;
+  cursor: pointer; transition: var(--transition);
+}
+.grade-btn:active { transform: scale(.96); }
+.grade-missed { color: var(--danger);  border-color: var(--danger); }
+.grade-missed:hover { background: var(--danger-bg); }
+.grade-close  { color: var(--warning); border-color: var(--warning); }
+.grade-close:hover { background: var(--warning-bg); }
+.grade-got    { color: #fff; border-color: var(--success); background: var(--success); }
+.grade-got:hover { filter: brightness(1.05); }
 
 /* ── Flashcard ── */
 .flashcard-container { perspective: 1200px; margin: 16px; }
@@ -683,6 +756,12 @@ let state = {
   timerSeconds: 0,
   timerInterval: null,
   examTimeLimit: 3600,
+  // Name the Paper drill state
+  paperDrillQueue: [],   // questions for this session (each has a verified citation)
+  paperDrillIndex: 0,
+  paperDrillRevealed: false,
+  paperDrillTyped: '',
+  paperDrillAutoGrade: null, // 'correct' | 'partial' | 'wrong' | null
 };
 const STORAGE_KEY = 'endoboard_progress';
 function getDefaultProgress() {
@@ -1056,6 +1135,130 @@ function flashcardResponse(knew) {
   }
   render();
 }
+
+// ── Name the Paper drill ────────────────────────────────────────────────
+// The ABE Written Exam lists "classic and current literature" as its own
+// subject area. This mode drills the exact skill that wins points on the
+// oral boards: from a clinical cue, name the study. It reuses the existing
+// citation data and feeds grades back into the same SM-2 scheduler as MCQ
+// mode, so your Review Due queue stays coherent across modes.
+function getPaperDrillPool() {
+  return QUESTIONS.filter(q => q.citation && q.citation.verified);
+}
+function startPaperDrill(chapters) {
+  const userPickedChapters = !!(chapters && chapters.length > 0);
+  const chapterNums = userPickedChapters ? chapters : CHAPTERS.map(c => c.num);
+  let pool = getPaperDrillPool().filter(q => chapterNums.includes(q.chapter));
+
+  // Deduplicate within a single session by first-author surname so you
+  // aren't asked "who wrote this?" six times in a row for Sjögren 1990.
+  // Prefer the due-soonest question when multiple reference the same paper.
+  const byAuthor = new Map();
+  pool.forEach(q => {
+    const key = String(q.citation.author || '').trim().toLowerCase() + '|' + (q.citation.year || '');
+    const h = progress.questionHistory[q.id];
+    const due = h && h.dueDate ? h.dueDate : Infinity;
+    const prev = byAuthor.get(key);
+    if (!prev || due < prev.due) byAuthor.set(key, { q, due });
+  });
+  pool = Array.from(byAuthor.values()).map(e => e.q);
+
+  // 10-card sessions; blueprint-weighted when the user hasn't narrowed the
+  // chapter set, so a mixed-chapter drill still mirrors exam emphasis.
+  const target = 10;
+  const drill = userPickedChapters || pool.length <= target ? (shuffleArray(pool), pool.slice(0, target)) : blueprintSample(pool, target);
+
+  state.quizMode = 'paperDrill';
+  state.paperDrillQueue = drill;
+  state.paperDrillIndex = 0;
+  state.paperDrillRevealed = false;
+  state.paperDrillTyped = '';
+  state.paperDrillAutoGrade = null;
+  state.sessionResults = [];
+  state.screen = 'paperDrill';
+  render();
+}
+// Normalize a surname for forgiving free-text comparison: lowercase, strip
+// accents, drop whitespace + punctuation.
+function normAuthor(s) {
+  return (s || '')
+    .toString()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')   // combining marks
+    .toLowerCase()
+    .replace(/[^a-z]/g, '');
+}
+// Auto-grade the typed input against the citation author. Forgiving: any
+// substring match in either direction counts as correct (so "sjogren"
+// matches "Sjögren" and "torabinejad" matches "Torabinejad M").
+function gradePaperDrillAuto(typed, citation) {
+  const t = normAuthor(typed);
+  const a = normAuthor(citation.author);
+  if (!t || !a) return 'wrong';
+  if (t === a) return 'correct';
+  if (a.startsWith(t) || t.startsWith(a)) return 'correct';
+  if (a.includes(t) || t.includes(a)) return 'correct';
+  // Also check coauthors — a candidate who names the 3rd author is still
+  // on the right paper.
+  const co = normAuthor(citation.coauthors);
+  if (co && co.includes(t) && t.length >= 4) return 'partial';
+  return 'wrong';
+}
+function submitPaperDrillAnswer() {
+  if (state.paperDrillRevealed) return;
+  const q = state.paperDrillQueue[state.paperDrillIndex];
+  if (!q) return;
+  const input = document.getElementById('paper-drill-input');
+  if (input) state.paperDrillTyped = input.value;
+  state.paperDrillAutoGrade = gradePaperDrillAuto(state.paperDrillTyped, q.citation);
+  state.paperDrillRevealed = true;
+  render();
+}
+// User self-grades after reveal. 'got' = 4 (clean recall), 'close' = 3
+// (named part but not quite), 'missed' = 2 (needs SR reset). These map
+// directly into the same applySM2 scheduler the MCQ mode uses.
+function recordPaperDrillGrade(which) {
+  const q = state.paperDrillQueue[state.paperDrillIndex];
+  if (!q) return;
+  const grade = which === 'got' ? 4 : which === 'close' ? 3 : 2;
+  if (!progress.questionHistory[q.id]) {
+    progress.questionHistory[q.id] = {attempts: 0, correct: 0, lastSeen: 0, ...SM2_DEFAULTS};
+  }
+  const h = progress.questionHistory[q.id];
+  h.attempts++;
+  if (grade >= 3) h.correct++;
+  h.lastSeen = Date.now();
+  applySM2(h, grade);
+  state.sessionResults.push({questionId: q.id, correct: grade >= 3, mode: 'paperDrill'});
+  recordStudyToday();
+  if (grade >= 4) addXP(12);
+  else if (grade >= 3) addXP(6);
+  else addXP(2);
+  saveProgress();
+  // Advance
+  if (state.paperDrillIndex < state.paperDrillQueue.length - 1) {
+    state.paperDrillIndex++;
+    state.paperDrillRevealed = false;
+    state.paperDrillTyped = '';
+    state.paperDrillAutoGrade = null;
+    render();
+  } else {
+    // Stash the session in history and jump to a results card reusing the
+    // existing results screen.
+    const correct = state.sessionResults.filter(r => r.correct).length;
+    const total = state.sessionResults.length;
+    progress.sessionHistory.push({
+      date: Date.now(),
+      mode: 'paperDrill',
+      score: correct,
+      total: total,
+      chapters: [],
+    });
+    saveProgress();
+    state.screen = 'results';
+    render();
+  }
+}
 function shuffleArray(arr) {
   for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
@@ -1129,6 +1332,7 @@ function render() {
     case 'quiz':      renderQuiz(app); break;
     case 'results':   renderResults(app); break;
     case 'flashcards': renderFlashcardScreen(app); break;
+    case 'paperDrill': renderPaperDrill(app); break;
     case 'stats':     renderStatsScreen(app); break;
     case 'settings':  renderSettings(app); break;
   }
@@ -1138,6 +1342,7 @@ function renderDashboard(app) {
   const readiness = getBoardReadiness();
   const weak = getWeakQuestions().length;
   const dueCount = getDueQuestions().length;
+  const paperDrillCount = getPaperDrillPool().length;
   const flaggedCount = Object.keys(progress.flagged || {}).length;
   const totalAttempted = Object.keys(progress.questionHistory).length;
   let html = '<div class="page-inner"><div class="header"><h1>EndoBoard</h1><div class="subtitle">ABE Board Review</div></div>';
@@ -1151,6 +1356,7 @@ function renderDashboard(app) {
   html += '<div class="stats-row"><div class="stat-card"><div class="stat-value">'+progress.xp+'</div><div class="stat-label">XP</div></div><div class="stat-card"><div class="stat-value">'+totalAttempted+'/'+QUESTIONS.length+'</div><div class="stat-label">Questions</div></div><div class="stat-card"><div class="stat-value">'+(progress.totalQuestions > 0 ? Math.round(progress.totalCorrect/progress.totalQuestions*100) : 0)+'%</div><div class="stat-label">Accuracy</div></div></div>';
   html += '<div class="card"><div class="card-title">Quick Start</div><div class="mode-grid">'
     + '<div class="mode-btn mode-btn-primary" onclick="startQuiz(\'reviewDue\',[])"><div class="mode-icon">&#x1F501;</div><div class="mode-name">Review Due</div><div class="mode-desc">'+dueCount+' cards due</div></div>'
+    + '<div class="mode-btn mode-btn-accent" onclick="startPaperDrill([])"><div class="mode-icon">&#x1F4DC;</div><div class="mode-name">Name the Paper</div><div class="mode-desc">'+paperDrillCount+' cited studies</div></div>'
     + '<div class="mode-btn" onclick="state.quizMode=\'quick10\';state.screen=\'chapterSelect\';render()"><div class="mode-icon">&#x26A1;</div><div class="mode-name">Quick 10</div><div class="mode-desc">5 min sprint</div></div>'
     + '<div class="mode-btn" onclick="state.quizMode=\'weak\';startQuiz(\'weak\',[])"><div class="mode-icon">&#x1F3AF;</div><div class="mode-name">Weak Areas</div><div class="mode-desc">'+weak+' questions</div></div>'
     + '<div class="mode-btn" onclick="startQuiz(\'flagged\',[])"><div class="mode-icon">&#x1F6A9;</div><div class="mode-name">Flagged</div><div class="mode-desc">'+flaggedCount+' flagged</div></div>'
@@ -1328,6 +1534,65 @@ function renderFlashcardScreen(app) {
   }
   app.innerHTML = html;
 }
+function renderPaperDrill(app) {
+  if (!state.paperDrillQueue || state.paperDrillQueue.length === 0) {
+    app.innerHTML = '<div class="quiz-header"><button class="quiz-back" onclick="state.screen=\'dashboard\';render()">&#x2190; Back</button><span class="quiz-progress-text">Name the Paper</span><span></span></div>'
+      + '<div class="card text-center mt-16">'
+      + '<div style="font-size:48px;margin-bottom:16px">&#x1F4DA;</div>'
+      + '<h3>No literature cards yet</h3>'
+      + '<p style="color:var(--text-secondary);margin-top:8px;line-height:1.6">Name the Paper drills questions that have a <strong>human-verified</strong> citation. Run the citation enrichment pipeline and curate a few entries first:</p>'
+      + '<pre style="text-align:left;background:var(--bg);padding:12px;border-radius:8px;font-size:11px;margin-top:12px;overflow-x:auto">ANTHROPIC_API_KEY=sk-... \\\n  npm run citations:enrich -- --priority --limit 20\nnpm run citations:curate\nnpm run questions:rebuild</pre>'
+      + '<button class="next-btn" onclick="state.screen=\'dashboard\';render()">Back to Dashboard</button></div>';
+    return;
+  }
+  const q = state.paperDrillQueue[state.paperDrillIndex];
+  const c = q.citation;
+  const chTitle = CHAPTERS.find(ch => ch.num === q.chapter)?.short || '';
+  const correctText = (q.options || []).find(o => o.letter === (q.answer || q.correctAnswer))?.text || '';
+
+  let html = '<div class="quiz-wrapper">'
+    + '<div class="quiz-header">'
+    + '<button class="quiz-back" onclick="if(confirm(\'End drill?\')){state.screen=\'dashboard\';render()}">&#x2190;</button>'
+    + '<span class="quiz-progress-text">'+(state.paperDrillIndex + 1)+' / '+state.paperDrillQueue.length+' &middot; Name the Paper</span>'
+    + '<span class="quiz-progress-text">Ch'+q.chapter+' '+chTitle+'</span>'
+    + '</div>'
+    + '<div class="progress-bar-strip"><div class="progress-bar-strip-fill" style="width:'+Math.round(((state.paperDrillIndex)/state.paperDrillQueue.length)*100)+'%"></div></div>'
+    + '<div class="paper-drill-card">'
+    + '<div class="paper-drill-cue-label">Clinical cue</div>'
+    + '<div class="paper-drill-stem">'+escHtml(q.question)+'</div>'
+    + '<div class="paper-drill-answer-label">Answer</div>'
+    + '<div class="paper-drill-answer">'+escHtml(correctText)+'</div>';
+
+  if (!state.paperDrillRevealed) {
+    html += '<div class="paper-drill-prompt">Which study would you cite?</div>'
+      + '<input id="paper-drill-input" class="paper-drill-input" type="text" autocomplete="off" autocapitalize="words" spellcheck="false" placeholder="Author surname (e.g. Sjögren)" value="'+escHtml(state.paperDrillTyped || '')+'" oninput="state.paperDrillTyped=this.value" onkeydown="if(event.key===\'Enter\'){event.preventDefault();submitPaperDrillAnswer()}">'
+      + '<button class="next-btn" onclick="submitPaperDrillAnswer()">Reveal</button>'
+      + '<div class="kbd-hint">Press Enter to reveal &nbsp;&middot;&nbsp; it\'s okay to leave it blank</div>';
+  } else {
+    const autoClass = 'paper-drill-autograde paper-drill-ag-' + state.paperDrillAutoGrade;
+    const autoText = state.paperDrillAutoGrade === 'correct' ? '\u2705 Match' : state.paperDrillAutoGrade === 'partial' ? '\u26A0\uFE0F Coauthor' : '\u274C No match';
+    const typedDisplay = state.paperDrillTyped ? '<span class="paper-drill-typed">You said: <em>'+escHtml(state.paperDrillTyped)+'</em></span>' : '<span class="paper-drill-typed paper-drill-skip">(no guess)</span>';
+    html += '<div class="paper-drill-result">'+typedDisplay+'<span class="'+autoClass+'">'+autoText+'</span></div>'
+      + renderCitation(q)
+      + '<div class="paper-drill-self-grade-label">How did you do?</div>'
+      + '<div class="paper-drill-grade-row">'
+      + '<button class="grade-btn grade-missed" onclick="recordPaperDrillGrade(\'missed\')">Missed it</button>'
+      + '<button class="grade-btn grade-close"  onclick="recordPaperDrillGrade(\'close\')">Close</button>'
+      + '<button class="grade-btn grade-got"    onclick="recordPaperDrillGrade(\'got\')">Nailed it</button>'
+      + '</div>'
+      + '<div class="kbd-hint">Self-grade feeds the same SM-2 scheduler as Review Due.</div>';
+  }
+  html += '</div></div>';
+  app.innerHTML = html;
+
+  // Autofocus the input field when it appears
+  if (!state.paperDrillRevealed) {
+    setTimeout(() => {
+      const el = document.getElementById('paper-drill-input');
+      if (el) el.focus();
+    }, 50);
+  }
+}
 function renderStatsScreen(app) {
   let html = '<div class="page-inner"><div class="header"><h1>Your Progress</h1><div class="subtitle">Performance over time</div></div>';
   html += '<div class="card"><div class="card-title">Score by Chapter</div><div class="chart-bar-group">';
@@ -1402,6 +1667,7 @@ function renderBottomNav(active) {
   const svgExam = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>';
   const svgFlash = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M8 10h8M8 14h4"/></svg>';
   const svgReview = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>';
+  const svgPaper = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></svg>';
   const dueCount = getDueQuestions().length;
   const dueBadge = dueCount > 0 ? `<span class="nav-badge">${dueCount}</span>` : '';
 
@@ -1409,6 +1675,7 @@ function renderBottomNav(active) {
     <div class="sidebar-logo">Endo<span>Board</span></div>
     <button class="sidebar-item ${active==='dashboard'?'active':''}" onclick="state.screen='dashboard';render()">${svgHome} Dashboard</button>
     <button class="sidebar-item" onclick="startQuiz('reviewDue',[])">${svgReview} Review Due${dueBadge}</button>
+    <button class="sidebar-item ${active==='paperDrill'?'active':''}" onclick="startPaperDrill([])">${svgPaper} Name the Paper</button>
     <button class="sidebar-item" onclick="state.screen='chapterSelect';state.quizMode='study';render()">${svgStudy} Study Mode</button>
     <button class="sidebar-item" onclick="startQuiz('exam',[])">${svgExam} Exam Sim</button>
     <button class="sidebar-item" onclick="state.screen='chapterSelect';state.quizMode='flashcards';render()">${svgFlash} Flashcards</button>
@@ -1421,7 +1688,7 @@ function renderBottomNav(active) {
   const bottomNav = `<div class="bottom-nav">
     <button class="nav-item ${active==='dashboard'?'active':''}" onclick="state.screen='dashboard';render()">${svgHome} Home</button>
     <button class="nav-item" onclick="startQuiz('reviewDue',[])">${svgReview} Review${dueBadge}</button>
-    <button class="nav-item" onclick="state.screen='chapterSelect';state.quizMode='study';render()">${svgStudy} Study</button>
+    <button class="nav-item ${active==='paperDrill'?'active':''}" onclick="startPaperDrill([])">${svgPaper} Papers</button>
     <button class="nav-item ${active==='stats'?'active':''}" onclick="state.screen='stats';render()">${svgStats} Stats</button>
     <button class="nav-item ${active==='settings'?'active':''}" onclick="state.screen='settings';render()">${svgSettings} Settings</button>
   </div>`;
