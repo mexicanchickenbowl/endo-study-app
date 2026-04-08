@@ -446,6 +446,14 @@ body {
 .citation .cite-tag { display: inline-block; margin-left: 6px; padding: 1px 8px; border-radius: 999px; font-size: 10px; font-weight: 700; text-transform: uppercase; vertical-align: middle; }
 .citation-classic  .cite-tag { background: var(--success-bg); color: var(--success); }
 .citation-historic .cite-tag { background: var(--warning-bg); color: var(--warning); }
+.citation .cite-conf {
+  display: inline-block; margin-left: 6px;
+  padding: 1px 8px; border-radius: 999px;
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+  background: var(--border); color: var(--text-secondary);
+  vertical-align: middle;
+}
+.citation .cite-conf-low { background: var(--danger-bg); color: var(--danger); }
 .citation .cite-relevance { display: block; margin-top: 6px; color: var(--text-secondary); font-style: italic; font-size: 12px; }
 
 /* ── Name the Paper drill ── */
@@ -931,22 +939,38 @@ function renderCitation(q) {
   const c = q.citation;
   if (!c || !c.verified) return '';
   const cls = c.classification === 'historic' ? 'citation-historic' : 'citation-classic';
-  const coauthors = c.coauthors ? ', ' + escHtml(c.coauthors) : '';
-  const vol = c.volume ? ' ' + escHtml(String(c.volume)) : '';
-  const pages = c.pages ? ':' + escHtml(String(c.pages)) : '';
-  const pmidLink = c.pmid
-    ? ' <a href="https://pubmed.ncbi.nlm.nih.gov/' + encodeURIComponent(c.pmid) + '/" target="_blank" rel="noopener">PMID ' + escHtml(String(c.pmid)) + '</a>'
+
+  // Build a citation line that degrades gracefully when the enrichment
+  // pipeline only had confidence in the author and skipped other fields.
+  // We only render fragments that actually have data — never "Author ()."
+  // or "Author. ." with empty slots.
+  let line = '<strong>' + escHtml(c.author || '') + '</strong>';
+  if (c.coauthors) line += ', ' + escHtml(c.coauthors);
+  if (c.year != null && c.year !== '') line += ' (' + escHtml(String(c.year)) + ')';
+  line += '.';
+  if (c.title) line += ' <em>' + escHtml(c.title) + '</em>.';
+  if (c.journal) {
+    line += ' ' + escHtml(c.journal);
+    if (c.volume) line += ' ' + escHtml(String(c.volume));
+    if (c.pages)  line += ':' + escHtml(String(c.pages));
+    line += '.';
+  }
+  if (c.pmid) {
+    line += ' <a href="https://pubmed.ncbi.nlm.nih.gov/' + encodeURIComponent(c.pmid)
+          + '/" target="_blank" rel="noopener">PMID ' + escHtml(String(c.pmid)) + '</a>';
+  }
+
+  const confBadge = c.confidence && c.confidence !== 'high'
+    ? '<span class="cite-conf cite-conf-' + c.confidence + '" title="Citation confidence: ' + c.confidence + '">' + c.confidence + '</span>'
     : '';
   const relevance = c.relevance ? '<span class="cite-relevance">' + escHtml(c.relevance) + '</span>' : '';
+
   return '<div class="citation ' + cls + '">'
-    + '<span class="cite-label">Cite this study<span class="cite-tag">' + (c.classification || 'classic') + '</span></span>'
-    + '<strong>' + escHtml(c.author || '') + '</strong>'
-    + (c.coauthors ? escHtml(', ' + c.coauthors) : '')
-    + (c.year ? ' (' + escHtml(String(c.year)) + ')' : '')
-    + '. <em>' + escHtml(c.title || '') + '</em>. '
-    + escHtml(c.journal || '')
-    + vol + pages + '.'
-    + pmidLink
+    + '<span class="cite-label">Cite this study'
+    + '<span class="cite-tag">' + (c.classification || 'classic') + '</span>'
+    + confBadge
+    + '</span>'
+    + line
     + relevance
     + '</div>';
 }

@@ -19,28 +19,11 @@ import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs';
 const URL = 'http://localhost:3000/index.html';
 
 async function seedProgressAndCitation(page) {
-  // Seed a verified demo citation on the first question so the preview shows
-  // the citation pill. Done by running in-page JS before the script has
-  // fully rendered.
+  // Seed realistic progress state so the dashboard has something interesting
+  // to show. We no longer inject fake citations — the real enriched set is
+  // baked into questions.js.
   await page.evaluate(() => {
-    // Wait until QUESTIONS loaded
     if (!window.QUESTIONS || !window.QUESTIONS.length) return;
-    // Seed a verified demo citation on EVERY question so whichever card
-    // the quiz picks first during the shuffle will show the pill.
-    const demoCitation = {
-      author: 'Sjögren',
-      coauthors: 'Hägglund, Sundqvist, Wing',
-      year: 1990,
-      title: 'Factors affecting the long-term results of endodontic treatment',
-      journal: 'J Endod',
-      volume: '16',
-      pages: '498-504',
-      pmid: '2084204',
-      classification: 'classic',
-      relevance: 'Establishes the 94% success rate for teeth with pre-op PA lesions ≤ 5mm — a cornerstone board citation.',
-      verified: true,
-    };
-    for (const q of window.QUESTIONS) q.citation = demoCitation;
     // Seed realistic SM-2 history: 240 attempted, 12 due, 4-day streak.
     const now = Date.now();
     const progress = {
@@ -150,8 +133,13 @@ async function shoot(page, name) {
     // Name the Paper drill — question prompt (unrevealed)
     await page.evaluate(() => { startPaperDrill([]); });
     await page.waitForTimeout(200);
-    // Type into the real input so submitPaperDrillAnswer reads a value.
-    await page.fill('#paper-drill-input', 'Sjögren');
+    // Read the correct author from the currently-loaded card and type it
+    // so the revealed screenshot shows a successful match.
+    const correctAuthor = await page.evaluate(() => {
+      const q = state.paperDrillQueue[state.paperDrillIndex];
+      return q && q.citation ? q.citation.author : '';
+    });
+    await page.fill('#paper-drill-input', correctAuthor || 'guess');
     await shoot(page, '08-name-the-paper-prompt-desktop');
 
     // Name the Paper drill — revealed with citation + correct match
