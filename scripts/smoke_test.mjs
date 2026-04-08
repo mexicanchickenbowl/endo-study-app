@@ -10,8 +10,11 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 
 const html = readFileSync('index.html', 'utf8');
-const m = html.match(/<script>\s*([\s\S]*?)<\/script>/);
-if (!m) { console.error('no inline script'); process.exit(1); }
+// Find the MAIN app script (skip the password gate script that precedes it).
+// The main script is marked by its first line: const QUESTIONS = window.QUESTIONS;
+const mainScriptRe = /<script>\s*(const QUESTIONS = window\.QUESTIONS;[\s\S]*?)<\/script>/;
+const m = html.match(mainScriptRe);
+if (!m) { console.error('no main app script'); process.exit(1); }
 const js = m[1];
 
 // Minimal fake DOM sufficient for the render() paths we'll hit.
