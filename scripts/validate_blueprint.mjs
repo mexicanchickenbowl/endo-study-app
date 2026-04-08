@@ -3,10 +3,11 @@
 // Keep this file in sync with the implementation in index.html.
 // Run: node scripts/validate_blueprint.mjs
 
+// MUST stay in sync with BLUEPRINT in index.html
 const BLUEPRINT = {
-  1:  0.03, 2:  0.08, 3:  0.06, 4:  0.12, 5:  0.06,
-  6:  0.15, 7:  0.04, 8:  0.20, 9:  0.10, 10: 0.05,
-  11: 0.04, 12: 0.04, 13: 0.03,
+  1:  0.04, 2:  0.10, 3:  0.05, 4:  0.15, 5:  0.10,
+  6:  0.15, 7:  0.03, 8:  0.18, 9:  0.08, 10: 0.04,
+  11: 0.03, 12: 0.03, 13: 0.02,
 };
 
 function shuffleArray(arr) {
@@ -115,9 +116,11 @@ function makePool(perCh) {
 {
   const pool = makePool(200);
   const out = blueprintSample(pool, 100);
-  assert('Treatment (20%) has ~20', out.filter(q => q.chapter === 8).length >= 18 && out.filter(q => q.chapter === 8).length <= 22);
+  assert('Treatment (18%) has ~18', out.filter(q => q.chapter === 8).length >= 16 && out.filter(q => q.chapter === 8).length <= 20);
+  assert('Pathology (15%) has ~15', out.filter(q => q.chapter === 4).length >= 13 && out.filter(q => q.chapter === 4).length <= 17);
   assert('Diagnosis (15%) has ~15', out.filter(q => q.chapter === 6).length >= 13 && out.filter(q => q.chapter === 6).length <= 17);
-  assert('Complications (3%) has ~3', out.filter(q => q.chapter === 13).length >= 2 && out.filter(q => q.chapter === 13).length <= 4);
+  assert('Microbiology (10%) has ~10', out.filter(q => q.chapter === 2).length >= 8 && out.filter(q => q.chapter === 2).length <= 12);
+  assert('Complications (2%) has ~2', out.filter(q => q.chapter === 13).length >= 1 && out.filter(q => q.chapter === 13).length <= 3);
 }
 
 // Test: handles pool smaller than count

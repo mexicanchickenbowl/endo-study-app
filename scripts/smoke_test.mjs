@@ -209,7 +209,7 @@ const blueprintSample = vm.runInContext('blueprintSample', ctx);
 const BLUEPRINT = vm.runInContext('BLUEPRINT', ctx);
 
 // Blueprint exposure
-assert('BLUEPRINT is exposed in script', typeof BLUEPRINT === 'object' && BLUEPRINT[8] === 0.20);
+assert('BLUEPRINT is exposed in script', typeof BLUEPRINT === 'object' && BLUEPRINT[8] === 0.18);
 assert('blueprintSample is callable', typeof blueprintSample === 'function');
 
 // Exam Sim via startQuiz('exam', []) should blueprint-sample 50 questions.
@@ -219,9 +219,9 @@ assert('Exam Sim gets 50 questions', examState.quizQuestions.length === 50);
 {
   const counts = {};
   examState.quizQuestions.forEach(q => counts[q.chapter] = (counts[q.chapter] || 0) + 1);
-  // Treatment (0.20) should yield ~10 cards, Complications (0.03) should yield ~2.
-  assert('Exam Sim Tx ~= 10', counts[8] >= 8 && counts[8] <= 12, 'got ' + counts[8]);
-  assert('Exam Sim Complications ~= 2', (counts[13] || 0) >= 1 && (counts[13] || 0) <= 3, 'got ' + counts[13]);
+  // Treatment (0.18) should yield ~9 cards, Complications (0.02) ~1.
+  assert('Exam Sim Tx ~= 9', counts[8] >= 7 && counts[8] <= 11, 'got ' + counts[8]);
+  assert('Exam Sim Complications ~= 1', (counts[13] || 0) >= 0 && (counts[13] || 0) <= 2, 'got ' + counts[13]);
 }
 
 // User-picked chapters must bypass blueprint weighting (user intent wins).

@@ -627,26 +627,47 @@ const CHAPTERS = [
   {num:12,title:"Prognosis",short:"Prog"},
   {num:13,title:"Complications",short:"Comp"}
 ];
-// ABE written-exam content weighting. First-pass approximation of the
-// published ABE blueprint — tune these to the most current AAE/ABE
-// distribution (values are fractions and should sum to ~1.0). Used by
-// blueprintSample() below to make Exam Sim, Quick 10, and overflow Review
-// Due sessions mirror the real exam's mix rather than the uniform chapter
-// distribution the bank happens to have.
+// ABE written-exam content weighting — informed estimate, not ABE-official.
+//
+// The ABE does NOT publish numeric percentages. The Written Examination
+// Committee builds each exam via a test matrix developed with Measurement
+// Research Associates and the matrix is not public. These numbers are
+// educated estimates, biased toward the topics the ABE explicitly names
+// for "particular study" in the published exam instructions:
+//
+//   "basic concepts of cellular and molecular biology; inflammation,
+//    immunology and virology; management of medically compromised patients;
+//    pharmacology of antibiotics, analgesics, and local anesthetics to
+//    include drug interactions; microbiology to include anaerobic bacteria
+//    and current genus and species identification; differential diagnosis
+//    of radiolucent and radiopaque lesions; pulpal and periradicular
+//    pathosis; wound healing; bone regeneration; and the literature."
+//
+// Listed ABE subject areas (no % given): anatomy, biochemistry, embryology,
+// general and oral pathology, microanatomy, immunology, inflammation,
+// microbiology, pharmacology, vascular and neurophysiology, pulpal and
+// periradicular pathobiology, radiology, oral medicine, biostatistics,
+// clinical endodontics, dental materials, related dental disciplines,
+// AND classic and current literature.
+//
+// Used by blueprintSample() below to make Exam Sim, Quick 10, and overflow
+// Review Due sessions mirror the exam's emphasis rather than the uneven
+// chapter distribution of the bank. Edit these numbers (must sum to ~1.0)
+// if you learn something more specific from your program director.
 const BLUEPRINT = {
-  1:  0.03,  // Evidence-Based Dentistry
-  2:  0.08,  // Microbiology
-  3:  0.06,  // Pulpal & Periapical Anatomy
-  4:  0.12,  // Pulpal & Periapical Pathology
-  5:  0.06,  // Medicine & Pharmacology
-  6:  0.15,  // Diagnosis
-  7:  0.04,  // Non-Endo Disease
-  8:  0.20,  // Treatment
-  9:  0.10,  // Traumatic Injuries
-  10: 0.05,  // Cracked & Fractured Teeth
-  11: 0.04,  // Resorptive Diseases
-  12: 0.04,  // Prognosis
-  13: 0.03,  // Complications
+  1:  0.04,  // Evidence-Based Dentistry / biostatistics / literature
+  2:  0.10,  // Microbiology — ABE explicitly emphasizes anaerobes
+  3:  0.05,  // Pulpal & Periapical Anatomy / microanatomy / embryology
+  4:  0.15,  // Pulpal & Periapical Pathology — heavy emphasis: path, wound healing, bone regen, diff dx
+  5:  0.10,  // Medicine & Pharmacology — ABE emphasizes antibiotics, analgesics, LA, med-compromised
+  6:  0.15,  // Diagnosis — radiology, differential, clinical cases
+  7:  0.03,  // Non-Endo Disease / related disciplines
+  8:  0.18,  // Treatment — core clinical endodontics + dental materials
+  9:  0.08,  // Traumatic Injuries
+  10: 0.04,  // Cracked & Fractured Teeth
+  11: 0.03,  // Resorptive Diseases
+  12: 0.03,  // Prognosis
+  13: 0.02,  // Complications
 };
 let state = {
   screen: 'loading',
@@ -1320,7 +1341,7 @@ function renderStatsScreen(app) {
   // Blueprint Coverage — shows exam weight vs. your current accuracy side by
   // side so you can see which high-weight domains deserve more study time.
   html += '<div class="card"><div class="card-title">Blueprint Coverage</div>'
-        + '<p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">ABE written-exam weight vs. your mastery. Red gaps = high-weight domains where you\'re behind.</p>'
+        + '<p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">Estimated ABE written-exam weight vs. your mastery. The ABE doesn\'t publish exact percentages \u2014 these are biased toward the topics the board explicitly emphasizes. Red gaps in high-weight rows are where to study next.</p>'
         + '<div class="blueprint-table">';
   CHAPTERS.forEach(ch => {
     const weight = Math.round((BLUEPRINT[ch.num] || 0) * 100);
