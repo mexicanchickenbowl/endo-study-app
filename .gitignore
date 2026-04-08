@@ -9,3 +9,6 @@ ios/
 
 # macOS
 .DS_Store
+
+# Backups created by rewriter scripts
+*.bak
