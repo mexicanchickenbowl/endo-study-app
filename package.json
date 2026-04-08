@@ -1,0 +1,26 @@
+{
+  "name": "endoboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "EndoBoard — iOS study app for the American Board of Endodontics (Capacitor wrap of index.html).",
+  "scripts": {
+    "test:sm2": "node scripts/validate_sm2.mjs",
+    "questions:merge": "node scripts/merge_questions.mjs",
+    "questions:rebuild": "node scripts/build_questions_js.mjs",
+    "citations:enrich": "node scripts/enrich_citations.mjs",
+    "citations:curate": "node scripts/curate_cli.mjs",
+    "build:ios": "node scripts/build_ios_www.mjs",
+    "cap:sync": "npm run build:ios && npx cap sync ios",
+    "cap:ios": "npm run cap:sync && npx cap open ios",
+    "serve": "python3 -m http.server 3000"
+  },
+  "dependencies": {
+    "@capacitor/core": "^6.1.0",
+    "@capacitor/ios": "^6.1.0",
+    "@capacitor/local-notifications": "^6.1.0"
+  },
+  "devDependencies": {
+    "@anthropic-ai/sdk": "^0.30.0",
+    "@capacitor/cli": "^6.1.0"
+  }
+}
