@@ -1167,15 +1167,15 @@ function flashcardResponse(knew) {
 // citation data and feeds grades back into the same SM-2 scheduler as MCQ
 // mode, so your Review Due queue stays coherent across modes.
 function authorInStem(q) {
+  // Defensive guard: if any future question leaks the author surname in the
+  // stem, it's excluded from the drill. The question bank has been curated
+  // to remove the 170 known leaks, so this should currently match zero.
   if (!q.citation?.author || !q.question) return false;
   const author = q.citation.author.toLowerCase().replace(/[^\w\s]/g, '');
   const stem = q.question.toLowerCase().replace(/[^\w\s]/g, '');
   return stem.includes(author);
 }
 function getPaperDrillPool() {
-  // Filter out questions where the author is already visible in the stem.
-  // "According to Sjögren et al, what is..." makes the drill trivial.
-  // Only ~33% of questions have hidden authors; we drill only those.
   return QUESTIONS.filter(q => q.citation && q.citation.verified && !authorInStem(q));
 }
 function startPaperDrill(chapters) {
