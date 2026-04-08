@@ -142,6 +142,31 @@ async function shoot(page, name) {
     await page.waitForTimeout(200);
     await shoot(page, '05-chapter-select-desktop');
 
+    // Stats page (shows the new Blueprint Coverage card)
+    await page.evaluate(() => { state.screen = 'stats'; render(); });
+    await page.waitForTimeout(200);
+    await shoot(page, '06-stats-blueprint-desktop');
+
+    await ctx.close();
+  }
+
+  // Stats page on mobile so you can see how the blueprint table reflows
+  {
+    const ctx = await browser.newContext({
+      viewport: { width: 393, height: 852 },
+      deviceScaleFactor: 3,
+      isMobile: true,
+      hasTouch: true,
+    });
+    const page = await ctx.newPage();
+    await page.goto(URL);
+    await seedProgressAndCitation(page);
+    await page.evaluate(() => {
+      if (typeof loadProgress === 'function') { loadProgress(); }
+      state.screen = 'stats'; render();
+    });
+    await page.waitForTimeout(200);
+    await shoot(page, '07-stats-blueprint-mobile');
     await ctx.close();
   }
 

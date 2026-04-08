@@ -262,6 +262,33 @@ body {
 .chapter-progress { font-size: 12px; color: var(--text-secondary); margin-top: 2px; font-weight: 500; }
 .chapter-bar { height: 5px; background: var(--border); border-radius: 3px; margin-top: 7px; overflow: hidden; }
 .chapter-bar-fill { height: 100%; border-radius: 3px; transition: width .6s cubic-bezier(.4,0,.2,1); }
+.chapter-weight {
+  display: inline-block; margin-left: 8px;
+  font-size: 10px; font-weight: 700; letter-spacing: .3px;
+  text-transform: uppercase; color: var(--primary-dark);
+  background: var(--primary-glow); padding: 2px 7px; border-radius: 999px;
+  vertical-align: middle;
+}
+.chapter-weight.high { color: #fff; background: var(--primary); }
+
+/* ── Blueprint coverage table (Stats page) ── */
+.blueprint-table { display: flex; flex-direction: column; gap: 10px; }
+.bp-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) auto 1fr 44px;
+  align-items: center; gap: 10px;
+  font-size: 13px;
+}
+.bp-label { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bp-weight { font-size: 11px; color: var(--text-secondary); font-weight: 600; white-space: nowrap; }
+.bp-bar-wrap { position: relative; height: 14px; }
+.bp-bar-target { position: absolute; top: 0; left: 0; height: 14px; background: var(--border); border-radius: 4px; }
+.bp-bar-actual { position: absolute; top: 0; left: 0; height: 14px; border-radius: 4px; transition: width .6s cubic-bezier(.4,0,.2,1); }
+.bp-acc { font-size: 12px; font-weight: 700; text-align: right; color: var(--text-secondary); }
+.bp-prio {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--primary); margin-right: 6px; vertical-align: middle;
+}
 @media (min-width: 900px) {
   .chapters-grid {
     display: grid;
@@ -600,6 +627,27 @@ const CHAPTERS = [
   {num:12,title:"Prognosis",short:"Prog"},
   {num:13,title:"Complications",short:"Comp"}
 ];
+// ABE written-exam content weighting. First-pass approximation of the
+// published ABE blueprint — tune these to the most current AAE/ABE
+// distribution (values are fractions and should sum to ~1.0). Used by
+// blueprintSample() below to make Exam Sim, Quick 10, and overflow Review
+// Due sessions mirror the real exam's mix rather than the uniform chapter
+// distribution the bank happens to have.
+const BLUEPRINT = {
+  1:  0.03,  // Evidence-Based Dentistry
+  2:  0.08,  // Microbiology
+  3:  0.06,  // Pulpal & Periapical Anatomy
+  4:  0.12,  // Pulpal & Periapical Pathology
+  5:  0.06,  // Medicine & Pharmacology
+  6:  0.15,  // Diagnosis
+  7:  0.04,  // Non-Endo Disease
+  8:  0.20,  // Treatment
+  9:  0.10,  // Traumatic Injuries
+  10: 0.05,  // Cracked & Fractured Teeth
+  11: 0.04,  // Resorptive Diseases
+  12: 0.04,  // Prognosis
+  13: 0.03,  // Complications
+};
 let state = {
   screen: 'loading',
   quizMode: null,
@@ -843,34 +891,42 @@ function showConfetti() {
 }
 function startQuiz(mode, chapters) {
   let questions = [];
-  const chapterNums = chapters && chapters.length > 0 ? chapters : CHAPTERS.map(c => c.num);
+  // When the user hasn't explicitly picked chapters, we're free to re-weight
+  // the draw to match the ABE exam blueprint. When they have picked chapters,
+  // honor their intent (a trauma-only session should stay trauma-only).
+  const userPickedChapters = !!(chapters && chapters.length > 0);
+  const chapterNums = userPickedChapters ? chapters : CHAPTERS.map(c => c.num);
   if (mode === 'study') {
     questions = QUESTIONS.filter(q => chapterNums.includes(q.chapter));
     shuffleArray(questions);
   } else if (mode === 'exam') {
     const pool = QUESTIONS.filter(q => chapterNums.includes(q.chapter));
-    shuffleArray(pool);
-    questions = pool.slice(0, 50);
+    questions = userPickedChapters ? (shuffleArray(pool), pool.slice(0, 50)) : blueprintSample(pool, 50);
   } else if (mode === 'weak') {
     questions = getWeakQuestions().filter(q => chapterNums.includes(q.chapter));
     shuffleArray(questions);
     if (questions.length === 0) {
-      questions = getUnseenQuestions().filter(q => chapterNums.includes(q.chapter));
-      shuffleArray(questions);
-      questions = questions.slice(0, 20);
+      const unseen = getUnseenQuestions().filter(q => chapterNums.includes(q.chapter));
+      questions = userPickedChapters ? (shuffleArray(unseen), unseen.slice(0, 20)) : blueprintSample(unseen, 20);
     }
   } else if (mode === 'quick10') {
     const pool = QUESTIONS.filter(q => chapterNums.includes(q.chapter));
-    shuffleArray(pool);
-    questions = pool.slice(0, 10);
+    questions = userPickedChapters ? (shuffleArray(pool), pool.slice(0, 10)) : blueprintSample(pool, 10);
   } else if (mode === 'flagged') {
     const flaggedIds = Object.keys(progress.flagged || {});
     questions = QUESTIONS.filter(q => flaggedIds.includes(String(q.id)) && chapterNums.includes(q.chapter));
     shuffleArray(questions);
   } else if (mode === 'reviewDue') {
     // SM-2 review queue: questions whose dueDate has passed, oldest-due first,
-    // capped at 20/session to avoid review fatigue.
-    questions = getDueQuestions().filter(q => chapterNums.includes(q.chapter)).slice(0, 20);
+    // capped at 20/session to avoid review fatigue. When more than 20 are due,
+    // pick the 20 via blueprint sampling so a backlog doesn't drown you in the
+    // one over-represented chapter.
+    const dueAll = getDueQuestions().filter(q => chapterNums.includes(q.chapter));
+    if (dueAll.length <= 20) {
+      questions = dueAll;
+    } else {
+      questions = userPickedChapters ? dueAll.slice(0, 20) : blueprintSample(dueAll, 20);
+    }
   }
   state.quizMode = mode;
   state.quizQuestions = questions;
@@ -986,6 +1042,58 @@ function shuffleArray(arr) {
   }
   return arr;
 }
+// Sample `count` questions from `pool` with the per-chapter frequency of
+// BLUEPRINT, so Exam Sim and Quick 10 mirror the ABE content distribution
+// instead of the uneven distribution of the question bank. Uses largest-
+// remainder rounding so the counts add up exactly to `count`. Falls back to
+// pulling from underrepresented chapters when a target chapter has too few
+// available questions. Pure function — unit tested in scripts/validate_blueprint.mjs.
+function blueprintSample(pool, count) {
+  if (!pool.length || count <= 0) return [];
+  if (pool.length <= count) { const c = pool.slice(); shuffleArray(c); return c; }
+
+  const byChapter = {};
+  pool.forEach(q => { (byChapter[q.chapter] = byChapter[q.chapter] || []).push(q); });
+
+  // Restrict the blueprint to chapters actually represented in `pool`, then
+  // renormalize so weights sum to 1 across that subset.
+  const chapters = Object.keys(byChapter).map(Number);
+  const weightSum = chapters.reduce((s, c) => s + (BLUEPRINT[c] || 0), 0) || 1;
+  const targets = chapters.map(c => ({
+    chapter: c,
+    weight: (BLUEPRINT[c] || 0) / weightSum,
+    available: byChapter[c].length,
+  }));
+
+  // Largest-remainder rounding, capped by availability.
+  const raw = targets.map(t => {
+    const want = t.weight * count;
+    const cap  = Math.min(t.available, Math.ceil(want));
+    return { ...t, want, floor: Math.min(t.available, Math.floor(want)), frac: want - Math.floor(want), cap };
+  });
+  let taken = raw.reduce((s, t) => s + t.floor, 0);
+  raw.sort((a, b) => b.frac - a.frac);
+  for (const t of raw) {
+    if (taken >= count) break;
+    if (t.floor < t.cap) { t.floor++; taken++; }
+  }
+  // Distribute any remaining shortfall to whichever chapters still have capacity.
+  if (taken < count) {
+    const overflow = raw.slice().sort((a, b) => (b.available - b.floor) - (a.available - a.floor));
+    for (const t of overflow) {
+      while (taken < count && t.floor < t.available) { t.floor++; taken++; }
+    }
+  }
+
+  const out = [];
+  raw.forEach(t => {
+    const bucket = byChapter[t.chapter].slice();
+    shuffleArray(bucket);
+    out.push(...bucket.slice(0, t.floor));
+  });
+  shuffleArray(out);
+  return out.slice(0, count);
+}
 function escHtml(str) {
   const d = document.createElement('div');
   d.textContent = str;
@@ -1033,7 +1141,10 @@ function renderDashboard(app) {
     const s = getChapterStats(ch.num);
     const barColor = s.pct >= 80 ? 'var(--success)' : s.pct >= 50 ? 'var(--warning)' : s.pct > 0 ? 'var(--danger)' : 'var(--border)';
     const numClass = s.masteryPct >= 80 ? 'mastered' : s.masteryPct >= 30 ? 'learning' : '';
-    html += '<div class="chapter-item" onclick="state.selectedChapters=['+ch.num+'];startQuiz(\'study\',['+ch.num+'])"><div class="chapter-num '+numClass+'">'+ch.num+'</div><div class="chapter-info"><div class="chapter-name">'+escHtml(ch.title)+'</div><div class="chapter-progress">'+s.attempted+'/'+s.total+' attempted &middot; '+s.pct+'% correct</div><div class="chapter-bar"><div class="chapter-bar-fill" style="width:'+(s.attempted > 0 ? Math.max(4, s.pct) : 0)+'%;background:'+barColor+'"></div></div></div></div>';
+    const weightPct = Math.round((BLUEPRINT[ch.num] || 0) * 100);
+    const weightCls = weightPct >= 10 ? 'chapter-weight high' : 'chapter-weight';
+    const weightBadge = weightPct > 0 ? '<span class="'+weightCls+'" title="Approx. share of ABE written exam">'+weightPct+'% of exam</span>' : '';
+    html += '<div class="chapter-item" onclick="state.selectedChapters=['+ch.num+'];startQuiz(\'study\',['+ch.num+'])"><div class="chapter-num '+numClass+'">'+ch.num+'</div><div class="chapter-info"><div class="chapter-name">'+escHtml(ch.title)+weightBadge+'</div><div class="chapter-progress">'+s.attempted+'/'+s.total+' attempted &middot; '+s.pct+'% correct</div><div class="chapter-bar"><div class="chapter-bar-fill" style="width:'+(s.attempted > 0 ? Math.max(4, s.pct) : 0)+'%;background:'+barColor+'"></div></div></div></div>';
   });
   html += '</div>';
   html += '</div>';
@@ -1204,6 +1315,28 @@ function renderStatsScreen(app) {
     const h = Math.max(4, (s.pct / 100) * 140);
     const color = s.pct >= 80 ? 'var(--success)' : s.pct >= 50 ? 'var(--warning)' : s.pct > 0 ? 'var(--danger)' : 'var(--border)';
     html += '<div class="chart-bar-wrapper"><div class="chart-percent">'+s.pct+'%</div><div class="chart-bar" style="height:'+h+'px;background:'+color+'"></div><div class="chart-bar-label">'+ch.short+'</div></div>';
+  });
+  html += '</div></div>';
+  // Blueprint Coverage — shows exam weight vs. your current accuracy side by
+  // side so you can see which high-weight domains deserve more study time.
+  html += '<div class="card"><div class="card-title">Blueprint Coverage</div>'
+        + '<p style="font-size:12px;color:var(--text-secondary);margin-bottom:12px">ABE written-exam weight vs. your mastery. Red gaps = high-weight domains where you\'re behind.</p>'
+        + '<div class="blueprint-table">';
+  CHAPTERS.forEach(ch => {
+    const weight = Math.round((BLUEPRINT[ch.num] || 0) * 100);
+    const s = getChapterStats(ch.num);
+    const gap = weight - Math.round((s.pct / 100) * weight); // weighted shortfall
+    const color = s.pct >= 80 ? 'var(--success)' : s.pct >= 50 ? 'var(--warning)' : s.pct > 0 ? 'var(--danger)' : 'var(--border)';
+    const priorityDot = weight >= 10 ? '<span class="bp-prio" title="High-weight domain"></span>' : '';
+    html += '<div class="bp-row">'
+         + '<div class="bp-label">'+priorityDot+escHtml(ch.title)+'</div>'
+         + '<div class="bp-weight">'+weight+'% exam</div>'
+         + '<div class="bp-bar-wrap">'
+         + '<div class="bp-bar-target" style="width:'+(weight*4)+'px"></div>'
+         + '<div class="bp-bar-actual" style="width:'+Math.max(2, Math.round((s.pct/100)*weight*4))+'px;background:'+color+'"></div>'
+         + '</div>'
+         + '<div class="bp-acc">'+s.pct+'%</div>'
+         + '</div>';
   });
   html += '</div></div>';
   html += '<div class="card"><div class="card-title">Recent Sessions</div>';

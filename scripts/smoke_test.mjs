@@ -191,6 +191,49 @@ const uncited = { citation: { author: 'Test', verified: false } };
 assert('unverified citation hidden', api.renderCitation(uncited) === '');
 assert('no citation field hidden', api.renderCitation({}) === '');
 
+// --- Blueprint sampling integration -------------------------------------
+// Swap in a fresh balanced pool so the sampler has real chapter data.
+const bpPool = [];
+for (let ch = 1; ch <= 13; ch++) {
+  for (let i = 0; i < 50; i++) {
+    bpPool.push({
+      id: 'bp_ch' + ch + '_' + i, chapter: ch, chapterTitle: 'ch' + ch, number: i,
+      question: 'q', options: [{letter:'A',text:'a'},{letter:'B',text:'b'},{letter:'C',text:'c'},{letter:'D',text:'d'}],
+      correctAnswer: 'A', answer: 'A', explanation: '',
+    });
+  }
+}
+vm.runInContext('QUESTIONS.length = 0; QUESTIONS.push(...' + JSON.stringify(bpPool) + ')', ctx);
+
+const blueprintSample = vm.runInContext('blueprintSample', ctx);
+const BLUEPRINT = vm.runInContext('BLUEPRINT', ctx);
+
+// Blueprint exposure
+assert('BLUEPRINT is exposed in script', typeof BLUEPRINT === 'object' && BLUEPRINT[8] === 0.20);
+assert('blueprintSample is callable', typeof blueprintSample === 'function');
+
+// Exam Sim via startQuiz('exam', []) should blueprint-sample 50 questions.
+api.startQuiz('exam', []);
+const examState = vm.runInContext('state', ctx);
+assert('Exam Sim gets 50 questions', examState.quizQuestions.length === 50);
+{
+  const counts = {};
+  examState.quizQuestions.forEach(q => counts[q.chapter] = (counts[q.chapter] || 0) + 1);
+  // Treatment (0.20) should yield ~10 cards, Complications (0.03) should yield ~2.
+  assert('Exam Sim Tx ~= 10', counts[8] >= 8 && counts[8] <= 12, 'got ' + counts[8]);
+  assert('Exam Sim Complications ~= 2', (counts[13] || 0) >= 1 && (counts[13] || 0) <= 3, 'got ' + counts[13]);
+}
+
+// User-picked chapters must bypass blueprint weighting (user intent wins).
+api.startQuiz('exam', [8]);  // only Treatment
+const txState = vm.runInContext('state', ctx);
+assert('User-picked exam respects filter', txState.quizQuestions.every(q => q.chapter === 8));
+
+// Quick 10 should also blueprint-sample when no chapters picked.
+api.startQuiz('quick10', []);
+const q10State = vm.runInContext('state', ctx);
+assert('Quick 10 gets 10 questions', q10State.quizQuestions.length === 10);
+
 console.log('');
 if (failed === 0) { console.log('All smoke tests passed.'); process.exit(0); }
 else { console.log(failed + ' smoke test(s) FAILED.'); process.exit(1); }
